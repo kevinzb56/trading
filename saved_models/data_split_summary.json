@@ -1,0 +1,8 @@
+{
+  "split_method": "time",
+  "test_size": 0.2,
+  "random_state": 42,
+  "n_total": 3336,
+  "n_train": 2669,
+  "n_test": 667
+}

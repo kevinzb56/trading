@@ -20,8 +20,8 @@ Usage:
 
 import logging
 import json
+import os
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -57,6 +57,7 @@ class InferencePipeline:
         self,
         use_gpu: bool = True,
         tavily_api_key: Optional[str] = None,
+        use_tavily_context: bool = False,
         target_timeframe: str = "5m",
     ):
         self.use_gpu = use_gpu
@@ -66,7 +67,10 @@ class InferencePipeline:
         self.entity_extractor = EntityExtractor(use_gpu=use_gpu)
         self.sentiment_analyzer = FinBERTSentiment(use_gpu=use_gpu)
         self.event_detector = EventDetector(use_gpu=use_gpu)
-        self.context_enricher = ContextEnricher(tavily_api_key=tavily_api_key)
+        self.context_enricher = ContextEnricher(
+            tavily_api_key=tavily_api_key,
+            enable_live_search=use_tavily_context,
+        )
         self.graph_reasoner = EntityGraph()
         self.impact_predictor = MarketImpactPredictor(target_timeframe=target_timeframe)
 
@@ -294,9 +298,21 @@ class InferencePipeline:
         logger.info(f"Trained pipeline loaded from {save_dir}")
 
     @classmethod
-    def load(cls, path: str, use_gpu: bool = True, target_timeframe: str = "5m"):
+    def load(
+        cls,
+        path: str,
+        use_gpu: bool = True,
+        target_timeframe: str = "5m",
+        tavily_api_key: Optional[str] = None,
+        use_tavily_context: bool = False,
+    ):
         """Class method to create and load a pre-trained pipeline."""
-        pipeline = cls(use_gpu=use_gpu, target_timeframe=target_timeframe)
+        pipeline = cls(
+            use_gpu=use_gpu,
+            tavily_api_key=tavily_api_key,
+            use_tavily_context=use_tavily_context,
+            target_timeframe=target_timeframe,
+        )
         pipeline.load_models()
         pipeline.load_trained(path)
         return pipeline
@@ -330,13 +346,23 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="predictions_output.csv", help="Output CSV")
     parser.add_argument("--timeframe", default="5m", choices=["1m", "5m", "10m"])
     parser.add_argument("--no-gpu", action="store_true")
+    parser.add_argument("--tavily-api-key", type=str, default=None,
+                        help="Tavily API key (or set TAVILY_API_KEY env var)")
+    parser.add_argument("--use-tavily-context", action="store_true",
+                        help="Auto-fetch macro context from Tavily when macro_context is empty")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
 
+    tavily_api_key = args.tavily_api_key or os.getenv("TAVILY_API_KEY")
+
     if args.tweet:
         pipeline = InferencePipeline.load(
-            args.model_dir, use_gpu=not args.no_gpu, target_timeframe=args.timeframe
+            args.model_dir,
+            use_gpu=not args.no_gpu,
+            target_timeframe=args.timeframe,
+            tavily_api_key=tavily_api_key,
+            use_tavily_context=args.use_tavily_context,
         )
         result = pipeline.predict(args.tweet)
         print(json.dumps(result.to_dict(), indent=2))
@@ -344,7 +370,11 @@ if __name__ == "__main__":
     elif args.csv:
         df = pd.read_csv(args.csv)
         pipeline = InferencePipeline.load(
-            args.model_dir, use_gpu=not args.no_gpu, target_timeframe=args.timeframe
+            args.model_dir,
+            use_gpu=not args.no_gpu,
+            target_timeframe=args.timeframe,
+            tavily_api_key=tavily_api_key,
+            use_tavily_context=args.use_tavily_context,
         )
         results = pipeline.predict_batch(
             texts=df["content"].tolist(),

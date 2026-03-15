@@ -9,8 +9,8 @@ Adds temporal context to tweets using:
 
 import logging
 import re
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 import numpy as np
@@ -92,8 +92,14 @@ class ContextEnricher:
     Optionally uses Tavily API for real-time macro context.
     """
 
-    def __init__(self, tavily_api_key: Optional[str] = None):
+    def __init__(
+        self,
+        tavily_api_key: Optional[str] = None,
+        enable_live_search: bool = False,
+    ):
         self.tavily_client = None
+        self.enable_live_search = enable_live_search
+        self._search_cache = {}
         if tavily_api_key:
             try:
                 from tavily import TavilyClient
@@ -149,6 +155,17 @@ class ContextEnricher:
             except (ValueError, AttributeError):
                 pass
 
+        # --- Optional live macro context via Tavily ---
+        if not macro_context and self.enable_live_search and self.tavily_client:
+            date_str = ""
+            if created_at:
+                try:
+                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                    date_str = dt.strftime("%Y-%m-%d")
+                except (ValueError, AttributeError):
+                    date_str = ""
+            macro_context = self.search_context(text=text, date_str=date_str)
+
         # --- Macro context ---
         if macro_context:
             mc_lower = macro_context.lower()
@@ -172,6 +189,11 @@ class ContextEnricher:
             return ""
 
         query = f"US markets {' '.join(found_keywords[:3])} {date_str}"
+        query = query.strip()
+
+        if query in self._search_cache:
+            return self._search_cache[query]
+
         try:
             result = self.tavily_client.search(
                 query=query,
@@ -186,7 +208,9 @@ class ContextEnricher:
                 snippet = r.get("content", "")[:300]
                 if snippet:
                     context_parts.append(snippet)
-            return "\n".join(context_parts)[:2000]
+            context = "\n".join(context_parts)[:2000]
+            self._search_cache[query] = context
+            return context
         except Exception as e:
             logger.warning(f"Tavily search failed: {e}")
             return ""
