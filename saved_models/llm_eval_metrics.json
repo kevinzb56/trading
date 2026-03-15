@@ -1,0 +1,1285 @@
+{
+  "layer6": {
+    "per_asset": {
+      "gold_1m": {
+        "asset": "gold",
+        "timeframe": "1m",
+        "accuracy": 0.431784107946027,
+        "balanced_accuracy": 0.3756938144700454,
+        "f1_macro": 0.36583498506662865,
+        "f1_weighted": 0.4360383586021961,
+        "precision_macro": 0.3620500370720705,
+        "recall_macro": 0.3756938144700454,
+        "mcc": 0.014048458183479523,
+        "kappa": 0.013998642650420168,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            148,
+            34,
+            131
+          ],
+          [
+            22,
+            11,
+            14
+          ],
+          [
+            153,
+            25,
+            129
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 313,
+          "flat(0)": 47,
+          "bullish(1)": 307
+        }
+      },
+      "equities_1m": {
+        "asset": "equities",
+        "timeframe": "1m",
+        "accuracy": 0.41829085457271364,
+        "balanced_accuracy": 0.38599555616405334,
+        "f1_macro": 0.38463494754057076,
+        "f1_weighted": 0.42013571317123566,
+        "precision_macro": 0.3838339549434015,
+        "recall_macro": 0.38599555616405334,
+        "mcc": 0.0711422356017343,
+        "kappa": 0.07111066444610337,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            129,
+            46,
+            111
+          ],
+          [
+            47,
+            28,
+            32
+          ],
+          [
+            107,
+            45,
+            122
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 286,
+          "flat(0)": 107,
+          "bullish(1)": 274
+        }
+      },
+      "btc_1m": {
+        "asset": "btc",
+        "timeframe": "1m",
+        "accuracy": 0.4527736131934033,
+        "balanced_accuracy": 0.3722442736456098,
+        "f1_macro": 0.3713868667429039,
+        "f1_weighted": 0.45277551584846853,
+        "precision_macro": 0.3707800529799809,
+        "recall_macro": 0.3722442736456098,
+        "mcc": 0.028921146100371175,
+        "kappa": 0.028906829622420194,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            132,
+            20,
+            150
+          ],
+          [
+            23,
+            8,
+            16
+          ],
+          [
+            135,
+            21,
+            162
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 302,
+          "flat(0)": 47,
+          "bullish(1)": 318
+        }
+      },
+      "cl_1m": {
+        "asset": "cl",
+        "timeframe": "1m",
+        "accuracy": 0.3778110944527736,
+        "balanced_accuracy": 0.3860569312005701,
+        "f1_macro": 0.3778390823053655,
+        "f1_weighted": 0.37372706795452193,
+        "precision_macro": 0.3820217917675545,
+        "recall_macro": 0.3860569312005701,
+        "mcc": 0.07173860964221639,
+        "kappa": 0.07047848673407364,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            72,
+            68,
+            118
+          ],
+          [
+            43,
+            81,
+            63
+          ],
+          [
+            62,
+            61,
+            99
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 258,
+          "flat(0)": 187,
+          "bullish(1)": 222
+        }
+      },
+      "wheat_1m": {
+        "asset": "wheat",
+        "timeframe": "1m",
+        "accuracy": 0.56071964017991,
+        "balanced_accuracy": 0.434194852397946,
+        "f1_macro": 0.4184120665016103,
+        "f1_weighted": 0.5894832304761367,
+        "precision_macro": 0.41946068875893444,
+        "recall_macro": 0.434194852397946,
+        "mcc": 0.19008982135282218,
+        "kappa": 0.18483125680416101,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            38,
+            31,
+            29
+          ],
+          [
+            73,
+            310,
+            80
+          ],
+          [
+            41,
+            39,
+            26
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 98,
+          "flat(0)": 463,
+          "bullish(1)": 106
+        }
+      },
+      "eurodollar_1m": {
+        "asset": "eurodollar",
+        "timeframe": "1m",
+        "accuracy": 0.35082458770614694,
+        "balanced_accuracy": 0.34882624150916836,
+        "f1_macro": 0.3478049392617379,
+        "f1_weighted": 0.34878154200427275,
+        "precision_macro": 0.35057010569506214,
+        "recall_macro": 0.34882624150916836,
+        "mcc": 0.022128710739198715,
+        "kappa": 0.022007382073075732,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            98,
+            55,
+            78
+          ],
+          [
+            79,
+            61,
+            65
+          ],
+          [
+            99,
+            57,
+            75
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 231,
+          "flat(0)": 205,
+          "bullish(1)": 231
+        }
+      },
+      "treasury_2y_1m": {
+        "asset": "treasury_2y",
+        "timeframe": "1m",
+        "accuracy": 0.4482758620689655,
+        "balanced_accuracy": 0.35772708450969315,
+        "f1_macro": 0.3567178207664991,
+        "f1_weighted": 0.44086167541686133,
+        "precision_macro": 0.35702664271815593,
+        "recall_macro": 0.35772708450969315,
+        "mcc": 0.04109375407854137,
+        "kappa": 0.04098895474453701,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            36,
+            81,
+            21
+          ],
+          [
+            60,
+            234,
+            81
+          ],
+          [
+            40,
+            85,
+            29
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 138,
+          "flat(0)": 375,
+          "bullish(1)": 154
+        }
+      },
+      "gold_5m": {
+        "asset": "gold",
+        "timeframe": "5m",
+        "accuracy": 0.4362818590704648,
+        "balanced_accuracy": 0.33290237584851734,
+        "f1_macro": 0.3287930977287483,
+        "f1_weighted": 0.43422868726871594,
+        "precision_macro": 0.3330592294479608,
+        "recall_macro": 0.33290237584851734,
+        "mcc": -0.015406293428171744,
+        "kappa": -0.01509331627965338,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            170,
+            25,
+            116
+          ],
+          [
+            21,
+            3,
+            12
+          ],
+          [
+            187,
+            15,
+            118
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 311,
+          "flat(0)": 36,
+          "bullish(1)": 320
+        }
+      },
+      "equities_5m": {
+        "asset": "equities",
+        "timeframe": "5m",
+        "accuracy": 0.4257871064467766,
+        "balanced_accuracy": 0.34274798631799624,
+        "f1_macro": 0.3398645379777456,
+        "f1_weighted": 0.42026973990643324,
+        "precision_macro": 0.34182337578564,
+        "recall_macro": 0.34274798631799624,
+        "mcc": 0.00572800704761641,
+        "kappa": 0.0056633296486010565,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            179,
+            26,
+            113
+          ],
+          [
+            35,
+            8,
+            21
+          ],
+          [
+            157,
+            31,
+            97
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 318,
+          "flat(0)": 64,
+          "bullish(1)": 285
+        }
+      },
+      "btc_5m": {
+        "asset": "btc",
+        "timeframe": "5m",
+        "accuracy": 0.46926536731634183,
+        "balanced_accuracy": 0.3435804642488054,
+        "f1_macro": 0.3329281255623297,
+        "f1_weighted": 0.4561976202626556,
+        "precision_macro": 0.3429501983774501,
+        "recall_macro": 0.3435804642488054,
+        "mcc": 0.01776056867312254,
+        "kappa": 0.016895942975151512,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            219,
+            15,
+            98
+          ],
+          [
+            21,
+            2,
+            5
+          ],
+          [
+            193,
+            22,
+            92
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 332,
+          "flat(0)": 28,
+          "bullish(1)": 307
+        }
+      },
+      "cl_5m": {
+        "asset": "cl",
+        "timeframe": "5m",
+        "accuracy": 0.4002998500749625,
+        "balanced_accuracy": 0.3706309082446595,
+        "f1_macro": 0.365666246321984,
+        "f1_weighted": 0.40297959469193523,
+        "precision_macro": 0.36590766734048913,
+        "recall_macro": 0.3706309082446595,
+        "mcc": 0.030257320915482198,
+        "kappa": 0.030019232377288985,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            117,
+            38,
+            146
+          ],
+          [
+            29,
+            24,
+            37
+          ],
+          [
+            102,
+            48,
+            126
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 301,
+          "flat(0)": 90,
+          "bullish(1)": 276
+        }
+      },
+      "wheat_5m": {
+        "asset": "wheat",
+        "timeframe": "5m",
+        "accuracy": 0.5397301349325337,
+        "balanced_accuracy": 0.5030133242899201,
+        "f1_macro": 0.4918846899224805,
+        "f1_weighted": 0.564488903803912,
+        "precision_macro": 0.5039701035316629,
+        "recall_macro": 0.5030133242899201,
+        "mcc": 0.2924906184521259,
+        "kappa": 0.28427973240312887,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            63,
+            16,
+            62
+          ],
+          [
+            81,
+            227,
+            62
+          ],
+          [
+            59,
+            27,
+            70
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 141,
+          "flat(0)": 370,
+          "bullish(1)": 156
+        }
+      },
+      "eurodollar_5m": {
+        "asset": "eurodollar",
+        "timeframe": "5m",
+        "accuracy": 0.43928035982008995,
+        "balanced_accuracy": 0.41736136049861544,
+        "f1_macro": 0.40778202334555314,
+        "f1_weighted": 0.442868313527682,
+        "precision_macro": 0.40484335578202907,
+        "recall_macro": 0.41736136049861544,
+        "mcc": 0.09771842609599299,
+        "kappa": 0.0972689144052371,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            152,
+            61,
+            93
+          ],
+          [
+            26,
+            32,
+            33
+          ],
+          [
+            128,
+            33,
+            109
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 306,
+          "flat(0)": 91,
+          "bullish(1)": 270
+        }
+      },
+      "treasury_2y_5m": {
+        "asset": "treasury_2y",
+        "timeframe": "5m",
+        "accuracy": 0.3523238380809595,
+        "balanced_accuracy": 0.3458496023528313,
+        "f1_macro": 0.3455093606448889,
+        "f1_weighted": 0.35333126557844236,
+        "precision_macro": 0.34588666693929854,
+        "recall_macro": 0.3458496023528313,
+        "mcc": 0.019396389429534474,
+        "kappa": 0.019378024625814283,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            55,
+            68,
+            56
+          ],
+          [
+            78,
+            108,
+            81
+          ],
+          [
+            65,
+            84,
+            72
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 179,
+          "flat(0)": 267,
+          "bullish(1)": 221
+        }
+      },
+      "gold_10m": {
+        "asset": "gold",
+        "timeframe": "10m",
+        "accuracy": 0.4587706146926537,
+        "balanced_accuracy": 0.3797251109894788,
+        "f1_macro": 0.3673341983686811,
+        "f1_weighted": 0.4604190550010744,
+        "precision_macro": 0.369857075120233,
+        "recall_macro": 0.3797251109894788,
+        "mcc": 0.021491752333709944,
+        "kappa": 0.020844770304945137,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            159,
+            23,
+            108
+          ],
+          [
+            13,
+            5,
+            9
+          ],
+          [
+            198,
+            10,
+            142
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 290,
+          "flat(0)": 27,
+          "bullish(1)": 350
+        }
+      },
+      "equities_10m": {
+        "asset": "equities",
+        "timeframe": "10m",
+        "accuracy": 0.4752623688155922,
+        "balanced_accuracy": 0.3694574776386812,
+        "f1_macro": 0.3703078942774376,
+        "f1_weighted": 0.4715367695724367,
+        "precision_macro": 0.37255448685152975,
+        "recall_macro": 0.3694574776386812,
+        "mcc": 0.0633308828029237,
+        "kappa": 0.06326239085772967,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            173,
+            15,
+            131
+          ],
+          [
+            26,
+            5,
+            20
+          ],
+          [
+            138,
+            20,
+            139
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 319,
+          "flat(0)": 51,
+          "bullish(1)": 297
+        }
+      },
+      "btc_10m": {
+        "asset": "btc",
+        "timeframe": "10m",
+        "accuracy": 0.4917541229385307,
+        "balanced_accuracy": 0.34850800111994146,
+        "f1_macro": 0.34214014191197034,
+        "f1_weighted": 0.4820282608370843,
+        "precision_macro": 0.3515425775875249,
+        "recall_macro": 0.34850800111994146,
+        "mcc": 0.0468315582776702,
+        "kappa": 0.045058323690145285,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            221,
+            15,
+            99
+          ],
+          [
+            17,
+            1,
+            6
+          ],
+          [
+            187,
+            15,
+            106
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 335,
+          "flat(0)": 24,
+          "bullish(1)": 308
+        }
+      },
+      "cl_10m": {
+        "asset": "cl",
+        "timeframe": "10m",
+        "accuracy": 0.4032983508245877,
+        "balanced_accuracy": 0.33286913674237617,
+        "f1_macro": 0.3318948813662828,
+        "f1_weighted": 0.40332208603209996,
+        "precision_macro": 0.3326939445413925,
+        "recall_macro": 0.33286913674237617,
+        "mcc": -0.008484917820480928,
+        "kappa": -0.008452330753947912,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            115,
+            30,
+            151
+          ],
+          [
+            29,
+            9,
+            33
+          ],
+          [
+            118,
+            37,
+            145
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 296,
+          "flat(0)": 71,
+          "bullish(1)": 300
+        }
+      },
+      "wheat_10m": {
+        "asset": "wheat",
+        "timeframe": "10m",
+        "accuracy": 0.5382308845577212,
+        "balanced_accuracy": 0.518771586836103,
+        "f1_macro": 0.5099429955112389,
+        "f1_weighted": 0.5629925257072326,
+        "precision_macro": 0.5320405707007559,
+        "recall_macro": 0.518771586836103,
+        "mcc": 0.31411904635045645,
+        "kappa": 0.30388758433038876,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            73,
+            14,
+            63
+          ],
+          [
+            78,
+            202,
+            61
+          ],
+          [
+            76,
+            16,
+            84
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 150,
+          "flat(0)": 341,
+          "bullish(1)": 176
+        }
+      },
+      "eurodollar_10m": {
+        "asset": "eurodollar",
+        "timeframe": "10m",
+        "accuracy": 0.4287856071964018,
+        "balanced_accuracy": 0.3587309383579111,
+        "f1_macro": 0.3502365150266095,
+        "f1_weighted": 0.4194925510621047,
+        "precision_macro": 0.35415849577187397,
+        "recall_macro": 0.3587309383579111,
+        "mcc": 0.0395781022186237,
+        "kappa": 0.03858492921619516,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            188,
+            34,
+            84
+          ],
+          [
+            31,
+            12,
+            31
+          ],
+          [
+            162,
+            39,
+            86
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 306,
+          "flat(0)": 74,
+          "bullish(1)": 287
+        }
+      },
+      "treasury_2y_10m": {
+        "asset": "treasury_2y",
+        "timeframe": "10m",
+        "accuracy": 0.36881559220389803,
+        "balanced_accuracy": 0.3712415020367958,
+        "f1_macro": 0.3681100681957597,
+        "f1_weighted": 0.3699944814797888,
+        "precision_macro": 0.3713432225765021,
+        "recall_macro": 0.3712415020367958,
+        "mcc": 0.05606321262642118,
+        "kappa": 0.05556489802507669,
+        "n_samples": 667,
+        "confusion_matrix": [
+          [
+            72,
+            57,
+            62
+          ],
+          [
+            75,
+            83,
+            53
+          ],
+          [
+            68,
+            106,
+            91
+          ]
+        ],
+        "class_dist": {
+          "bearish(-1)": 191,
+          "flat(0)": 211,
+          "bullish(1)": 265
+        }
+      }
+    },
+    "relevance": {
+      "accuracy": 0.8500749625187406,
+      "precision": 0.675,
+      "recall": 0.5704225352112676,
+      "f1_weighted": 0.8453188097759256,
+      "f1_macro": 0.7625185142987354,
+      "n_samples": 667,
+      "roc_auc": 0.8693494299128104
+    },
+    "global_summary": {
+      "mean_accuracy": 0.44135075319483114,
+      "mean_balanced_accuracy": 0.38076802521046277,
+      "mean_f1_macro": 0.3750012135403346,
+      "mean_f1_weighted": 0.44314061705739477,
+      "mean_precision_macro": 0.3784940116328335,
+      "mean_recall_macro": 0.38076802521046277,
+      "mean_mcc": 0.06762082903206622
+    }
+  },
+  "layer7": {
+    "timeframe": "5m",
+    "per_asset": {
+      "gold": {
+        "lgbm": {
+          "accuracy": 0.4257871064467766,
+          "balanced_accuracy": 0.31095406097415745,
+          "f1_macro": 0.2762992241253111,
+          "f1_weighted": 0.3773057476531827,
+          "precision_macro": 0.30875779067268433,
+          "recall_macro": 0.31095406097415745,
+          "mcc": -0.05441459406249158,
+          "kappa": -0.044309179059937254,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              229,
+              19,
+              63
+            ],
+            [
+              32,
+              1,
+              3
+            ],
+            [
+              256,
+              10,
+              54
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 311,
+            "flat(0)": 36,
+            "bullish(1)": 320
+          }
+        },
+        "llm": {
+          "accuracy": 0.10794602698650675,
+          "balanced_accuracy": 0.3463011343336906,
+          "f1_macro": 0.10457321155771544,
+          "f1_weighted": 0.10584904836622216,
+          "precision_macro": 0.349468095157115,
+          "recall_macro": 0.3463011343336906,
+          "mcc": 0.03149948972480943,
+          "kappa": 0.011226521098933517,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              4,
+              286,
+              21
+            ],
+            [
+              0,
+              33,
+              3
+            ],
+            [
+              6,
+              279,
+              35
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 311,
+            "flat(0)": 36,
+            "bullish(1)": 320
+          }
+        }
+      },
+      "equities": {
+        "lgbm": {
+          "accuracy": 0.44677661169415295,
+          "balanced_accuracy": 0.3452733642281805,
+          "f1_macro": 0.3438417014403015,
+          "f1_weighted": 0.43743874654215686,
+          "precision_macro": 0.3506959561976384,
+          "recall_macro": 0.3452733642281805,
+          "mcc": 0.019067036893822012,
+          "kappa": 0.01898862834662618,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              160,
+              7,
+              151
+            ],
+            [
+              35,
+              4,
+              25
+            ],
+            [
+              131,
+              20,
+              134
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 318,
+            "flat(0)": 64,
+            "bullish(1)": 285
+          }
+        },
+        "llm": {
+          "accuracy": 0.13943028485757122,
+          "balanced_accuracy": 0.3398633178859098,
+          "f1_macro": 0.12507699771596156,
+          "f1_weighted": 0.10844121676589953,
+          "precision_macro": 0.3303874092009685,
+          "recall_macro": 0.3398633178859098,
+          "mcc": 0.003079702434313002,
+          "kappa": 0.0012469478473194906,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              26,
+              281,
+              11
+            ],
+            [
+              5,
+              58,
+              1
+            ],
+            [
+              25,
+              251,
+              9
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 318,
+            "flat(0)": 64,
+            "bullish(1)": 285
+          }
+        }
+      },
+      "btc": {
+        "lgbm": {
+          "accuracy": 0.47976011994003,
+          "balanced_accuracy": 0.3413430361744792,
+          "f1_macro": 0.3373967368855844,
+          "f1_weighted": 0.47302083159163916,
+          "precision_macro": 0.34282490749074906,
+          "recall_macro": 0.3413430361744792,
+          "mcc": 0.03213236516505636,
+          "kappa": 0.031383397224500786,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              207,
+              13,
+              112
+            ],
+            [
+              20,
+              1,
+              7
+            ],
+            [
+              177,
+              18,
+              112
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 332,
+            "flat(0)": 28,
+            "bullish(1)": 307
+          }
+        },
+        "llm": {
+          "accuracy": 0.049475262368815595,
+          "balanced_accuracy": 0.32761618834575157,
+          "f1_macro": 0.03843550412393242,
+          "f1_weighted": 0.020979271376788313,
+          "precision_macro": 0.5136986301369862,
+          "recall_macro": 0.32761618834575157,
+          "mcc": 0.0061407416707708285,
+          "kappa": 0.0008151730884191632,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              4,
+              328,
+              0
+            ],
+            [
+              1,
+              27,
+              0
+            ],
+            [
+              3,
+              302,
+              2
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 332,
+            "flat(0)": 28,
+            "bullish(1)": 307
+          }
+        }
+      },
+      "cl": {
+        "lgbm": {
+          "accuracy": 0.4047976011994003,
+          "balanced_accuracy": 0.3338404994623397,
+          "f1_macro": 0.3071654358674343,
+          "f1_weighted": 0.3672044859954206,
+          "precision_macro": 0.3414273148706757,
+          "recall_macro": 0.3338404994623397,
+          "mcc": -0.002710794194663429,
+          "kappa": -0.002358276300647999,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              72,
+              13,
+              216
+            ],
+            [
+              19,
+              6,
+              65
+            ],
+            [
+              64,
+              20,
+              192
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 301,
+            "flat(0)": 90,
+            "bullish(1)": 276
+          }
+        },
+        "llm": {
+          "accuracy": 0.17841079460269865,
+          "balanced_accuracy": 0.3471859769635301,
+          "f1_macro": 0.1564309788416284,
+          "f1_weighted": 0.12942240601875543,
+          "precision_macro": 0.3493175047796897,
+          "recall_macro": 0.3471859769635301,
+          "mcc": 0.02360062964128544,
+          "kappa": 0.010286611700039416,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              12,
+              274,
+              15
+            ],
+            [
+              3,
+              82,
+              5
+            ],
+            [
+              19,
+              232,
+              25
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 301,
+            "flat(0)": 90,
+            "bullish(1)": 276
+          }
+        }
+      },
+      "wheat": {
+        "lgbm": {
+          "accuracy": 0.5337331334332833,
+          "balanced_accuracy": 0.4383983820154033,
+          "f1_macro": 0.42334063555843104,
+          "f1_weighted": 0.5210084915658423,
+          "precision_macro": 0.4371565896370074,
+          "recall_macro": 0.4383983820154033,
+          "mcc": 0.21316274884174488,
+          "kappa": 0.20833126610056285,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              61,
+              48,
+              32
+            ],
+            [
+              79,
+              272,
+              19
+            ],
+            [
+              70,
+              63,
+              23
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 141,
+            "flat(0)": 370,
+            "bullish(1)": 156
+          }
+        },
+        "llm": {
+          "accuracy": 0.5547226386806596,
+          "balanced_accuracy": 0.33479649862628585,
+          "f1_macro": 0.24280334057681588,
+          "f1_weighted": 0.39926373438900814,
+          "precision_macro": 0.3521870286576169,
+          "recall_macro": 0.33479649862628585,
+          "mcc": 0.023669568598657223,
+          "kappa": 0.004452596929416797,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              1,
+              138,
+              2
+            ],
+            [
+              1,
+              369,
+              0
+            ],
+            [
+              0,
+              156,
+              0
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 141,
+            "flat(0)": 370,
+            "bullish(1)": 156
+          }
+        }
+      },
+      "eurodollar": {
+        "lgbm": {
+          "accuracy": 0.4587706146926537,
+          "balanced_accuracy": 0.4055360035752193,
+          "f1_macro": 0.40697771378144054,
+          "f1_weighted": 0.45691129982736367,
+          "precision_macro": 0.40909842946986935,
+          "recall_macro": 0.4055360035752193,
+          "mcc": 0.1017208810275011,
+          "kappa": 0.10163490381601925,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              160,
+              39,
+              107
+            ],
+            [
+              41,
+              21,
+              29
+            ],
+            [
+              122,
+              23,
+              125
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 306,
+            "flat(0)": 91,
+            "bullish(1)": 270
+          }
+        },
+        "llm": {
+          "accuracy": 0.13793103448275862,
+          "balanced_accuracy": 0.3062574317476278,
+          "f1_macro": 0.09859994260558436,
+          "f1_weighted": 0.06256954756735895,
+          "precision_macro": 0.1931499460625674,
+          "recall_macro": 0.3062574317476278,
+          "mcc": -0.07547709798397038,
+          "kappa": -0.025915037837346278,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              11,
+              292,
+              3
+            ],
+            [
+              10,
+              80,
+              1
+            ],
+            [
+              23,
+              246,
+              1
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 306,
+            "flat(0)": 91,
+            "bullish(1)": 270
+          }
+        }
+      },
+      "treasury_2y": {
+        "lgbm": {
+          "accuracy": 0.3733133433283358,
+          "balanced_accuracy": 0.35639324930643745,
+          "f1_macro": 0.349636322554472,
+          "f1_weighted": 0.3641223343128085,
+          "precision_macro": 0.3619271762438278,
+          "recall_macro": 0.35639324930643745,
+          "mcc": 0.039189521724344645,
+          "kappa": 0.0382617334372779,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              31,
+              61,
+              87
+            ],
+            [
+              33,
+              116,
+              118
+            ],
+            [
+              38,
+              81,
+              102
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 179,
+            "flat(0)": 267,
+            "bullish(1)": 221
+          }
+        },
+        "llm": {
+          "accuracy": 0.3748125937031484,
+          "balanced_accuracy": 0.31751735796014985,
+          "f1_macro": 0.22097519889730158,
+          "f1_weighted": 0.2543257929800263,
+          "precision_macro": 0.26628350336790235,
+          "recall_macro": 0.31751735796014985,
+          "mcc": -0.042734414406437826,
+          "kappa": -0.02482295635256926,
+          "n_samples": 667,
+          "confusion_matrix": [
+            [
+              5,
+              161,
+              13
+            ],
+            [
+              18,
+              236,
+              13
+            ],
+            [
+              11,
+              201,
+              9
+            ]
+          ],
+          "class_dist": {
+            "bearish(-1)": 179,
+            "flat(0)": 267,
+            "bullish(1)": 221
+          }
+        }
+      }
+    },
+    "agreement_rates": {
+      "gold": 0.0704647676161919,
+      "equities": 0.10194902548725637,
+      "btc": 0.06296851574212893,
+      "cl": 0.12143928035982009,
+      "wheat": 0.5772113943028486,
+      "eurodollar": 0.15892053973013492,
+      "treasury_2y": 0.41379310344827586
+    },
+    "relevance": {
+      "lgbm": {
+        "accuracy": 0.8695652173913043,
+        "precision": 0.7522935779816514,
+        "recall": 0.5774647887323944,
+        "f1_weighted": 0.8629780528614196,
+        "f1_macro": 0.7865270221054839,
+        "n_samples": 667
+      },
+      "llm": {
+        "accuracy": 0.856071964017991,
+        "precision": 0.7738095238095238,
+        "recall": 0.45774647887323944,
+        "f1_weighted": 0.8413703917665141,
+        "f1_macro": 0.7442893198300373,
+        "n_samples": 667
+      }
+    },
+    "global_summary": {
+      "n_samples_evaluated": 667,
+      "n_samples_skipped": 0,
+      "mean_latency_s": 3.744859738685917,
+      "lgbm_mean_accuracy": 0.44613407581923326,
+      "lgbm_mean_f1_macro": 0.3492368243161393,
+      "llm_mean_accuracy": 0.2203898050974513,
+      "llm_mean_f1_macro": 0.14098502490270565,
+      "mean_lgbm_llm_agreement": 0.2152495180980938
+    }
+  },
+  "config": {
+    "data": "data/train.csv",
+    "model_dir": "saved_models",
+    "timeframe": "5m",
+    "llm_samples": 667,
+    "test_size": 0.2,
+    "split_method": "time"
+  }
+}

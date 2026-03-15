@@ -15,7 +15,7 @@ import logging
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -46,7 +46,8 @@ class TweetPrediction:
     content: str
     is_market_relevant: bool
     relevance_score: float
-    predictions: dict = field(default_factory=dict)  # asset -> MarketImpactPrediction
+    predictions: dict = field(default_factory=dict)   # asset -> MarketImpactPrediction
+    llm_reasoning: Optional[Any] = field(default=None)    # LLMReasoningResult, if Layer 7 ran
 
     def to_dict(self) -> dict:
         """Convert to serializable dictionary."""
@@ -63,6 +64,8 @@ class TweetPrediction:
                 "confidence": pred.confidence,
                 "reasoning": pred.reasoning,
             }
+        if self.llm_reasoning is not None:
+            result["llm_reasoning"] = self.llm_reasoning.to_dict()
         return result
 
 

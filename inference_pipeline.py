@@ -22,10 +22,11 @@ import logging
 import json
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-# Load .env file if present (so TAVILY_API_KEY can be set there instead of shell)
+# Load .env file if present (so API keys can be set there instead of shell)
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -44,7 +45,28 @@ from models.market_impact.impact_predictor import (
     MarketImpactPredictor, TweetPrediction, ASSETS,
 )
 
+# Layer 7: optional LLM reasoning (requires openai>=1.0)
+try:
+    from models.llm_reasoning.llm_reasoner import LLMReasoner, LLMReasoningResult
+    _LLM_AVAILABLE = True
+except ImportError:
+    _LLM_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class IntermediateLayerOutputs:
+    """
+    Sidecar container for raw intermediate objects from layers 1-5.
+    Used only by predict() when Layer 7 (LLM Reasoning) is enabled.
+    Not used by extract_features(), extract_features_batch(), or predict_batch().
+    """
+    ner_result: object       # EntityExtractionResult
+    sentiment_result: object # SentimentResult
+    event_result: object     # EventDetectionResult
+    graph_result: object     # GraphFeatures
+    context_result: object   # ContextFeatures
 
 
 class InferencePipeline:
@@ -66,11 +88,14 @@ class InferencePipeline:
         tavily_api_key: Optional[str] = None,
         use_tavily_context: bool = False,
         target_timeframe: str = "5m",
+        # Layer 7 options
+        use_llm_reasoning: bool = False,
+        llm_use_tavily: bool = False,
     ):
         self.use_gpu = use_gpu
         self.target_timeframe = target_timeframe
 
-        # Initialize layers
+        # Initialize layers 1-5
         self.entity_extractor = EntityExtractor(use_gpu=use_gpu)
         self.sentiment_analyzer = FinBERTSentiment(use_gpu=use_gpu)
         self.event_detector = EventDetector(use_gpu=use_gpu)
@@ -80,6 +105,19 @@ class InferencePipeline:
         )
         self.graph_reasoner = EntityGraph()
         self.impact_predictor = MarketImpactPredictor(target_timeframe=target_timeframe)
+
+        # Layer 7: LLM Reasoning (optional)
+        self.use_llm_reasoning = use_llm_reasoning
+        self.llm_reasoner: Optional["LLMReasoner"] = None
+        if use_llm_reasoning:
+            if not _LLM_AVAILABLE:
+                raise ImportError(
+                    "openai package is required for Layer 7. Install with: pip install openai>=1.0"
+                )
+            self.llm_reasoner = LLMReasoner.from_env(
+                use_tavily_for_llm=llm_use_tavily if llm_use_tavily else None
+            )
+            logger.info("Layer 7 (LLM Reasoning via Azure OpenAI GPT-4o) initialized")
 
         self._loaded = False
 
@@ -143,6 +181,60 @@ class InferencePipeline:
 
         return features
 
+    def _extract_features_with_intermediates(
+        self,
+        text: str,
+        created_at: str = "",
+        prev_tweet_time: Optional[str] = None,
+        macro_context: str = "",
+    ) -> tuple:
+        """
+        Like extract_features() but also returns the raw intermediate layer objects.
+
+        Called only from predict() when Layer 7 (LLM Reasoning) is enabled.
+        Returns the same flat feature dict as extract_features(), plus an
+        IntermediateLayerOutputs sidecar containing the rich objects needed to
+        build the LLM prompt. Never called by extract_features_batch() or
+        predict_batch() — those paths are unaffected.
+        """
+        if not self._loaded:
+            self.load_models()
+
+        features = {}
+
+        ner_result = self.entity_extractor.extract(text)
+        features.update(ner_result.to_feature_dict())
+
+        sentiment_result = self.sentiment_analyzer.analyze(text)
+        features.update(sentiment_result.to_feature_dict())
+
+        event_result = self.event_detector.detect(text)
+        features.update(event_result.to_feature_dict())
+
+        context_result = self.context_enricher.enrich(
+            text=text,
+            created_at=created_at,
+            prev_tweet_time=prev_tweet_time,
+            macro_context=macro_context,
+        )
+        features.update(context_result.to_feature_dict())
+
+        graph_result = self.graph_reasoner.build_and_reason(
+            entities=ner_result.entities,
+            events=event_result.events,
+            sentiment_compound=sentiment_result.compound,
+        )
+        features.update(graph_result.to_feature_dict())
+
+        intermediates = IntermediateLayerOutputs(
+            ner_result=ner_result,
+            sentiment_result=sentiment_result,
+            event_result=event_result,
+            graph_result=graph_result,
+            context_result=context_result,
+        )
+        return features, intermediates
+
     def predict(
         self,
         text: str,
@@ -154,18 +246,50 @@ class InferencePipeline:
         """
         Full prediction for a single tweet.
 
-        Returns TweetPrediction with per-asset direction and confidence.
+        When Layer 7 (LLM Reasoning) is enabled, runs all 5 feature layers via
+        _extract_features_with_intermediates() to also capture the rich layer
+        objects for the LLM prompt, then calls the Azure OpenAI GPT-4o reasoner
+        after the LightGBM predictions are complete.
+
+        Returns TweetPrediction with per-asset direction and confidence, plus an
+        optional llm_reasoning field when Layer 7 is active.
         """
-        features = self.extract_features(
-            text=text,
-            created_at=created_at,
-            prev_tweet_time=prev_tweet_time,
-            macro_context=macro_context,
-        )
+        # Choose extraction path based on whether Layer 7 needs intermediates
+        if self.use_llm_reasoning:
+            features, intermediates = self._extract_features_with_intermediates(
+                text=text,
+                created_at=created_at,
+                prev_tweet_time=prev_tweet_time,
+                macro_context=macro_context,
+            )
+        else:
+            features = self.extract_features(
+                text=text,
+                created_at=created_at,
+                prev_tweet_time=prev_tweet_time,
+                macro_context=macro_context,
+            )
+            intermediates = None
 
         predictions, is_relevant, relevance_score = self.impact_predictor.predict(
             features, timeframe=self.target_timeframe
         )
+
+        # Layer 7: LLM Reasoning (optional, non-blocking)
+        llm_result = None
+        if self.use_llm_reasoning and self.llm_reasoner is not None and intermediates is not None:
+            try:
+                llm_result = self.llm_reasoner.reason(
+                    text=text,
+                    created_at=created_at,
+                    timeframe=self.target_timeframe,
+                    intermediates=intermediates,
+                    lgbm_predictions=predictions,
+                    is_market_relevant=is_relevant,
+                    relevance_score=relevance_score,
+                )
+            except Exception as e:
+                logger.error(f"Layer 7 LLM reasoning failed, continuing without it: {e}")
 
         return TweetPrediction(
             tweet_id=tweet_id,
@@ -173,6 +297,7 @@ class InferencePipeline:
             is_market_relevant=is_relevant,
             relevance_score=relevance_score,
             predictions=predictions,
+            llm_reasoning=llm_result,
         )
 
     def predict_batch(
@@ -312,6 +437,8 @@ class InferencePipeline:
         target_timeframe: str = "5m",
         tavily_api_key: Optional[str] = None,
         use_tavily_context: bool = False,
+        use_llm_reasoning: bool = False,
+        llm_use_tavily: bool = False,
     ):
         """Class method to create and load a pre-trained pipeline."""
         pipeline = cls(
@@ -319,6 +446,8 @@ class InferencePipeline:
             tavily_api_key=tavily_api_key,
             use_tavily_context=use_tavily_context,
             target_timeframe=target_timeframe,
+            use_llm_reasoning=use_llm_reasoning,
+            llm_use_tavily=llm_use_tavily,
         )
         pipeline.load_models()
         pipeline.load_trained(path)
@@ -357,6 +486,10 @@ if __name__ == "__main__":
                         help="Tavily API key (or set TAVILY_API_KEY env var)")
     parser.add_argument("--use-tavily-context", action="store_true",
                         help="Auto-fetch macro context from Tavily when macro_context is empty")
+    parser.add_argument("--use-llm-reasoning", action="store_true",
+                        help="Enable Layer 7: Azure OpenAI GPT-4o reasoning over all layer outputs")
+    parser.add_argument("--llm-use-tavily", action="store_true",
+                        help="Fetch real-time Tavily context for the LLM prompt (Layer 7 only)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -370,6 +503,8 @@ if __name__ == "__main__":
             target_timeframe=args.timeframe,
             tavily_api_key=tavily_api_key,
             use_tavily_context=args.use_tavily_context,
+            use_llm_reasoning=args.use_llm_reasoning,
+            llm_use_tavily=args.llm_use_tavily,
         )
         result = pipeline.predict(args.tweet)
         print(json.dumps(result.to_dict(), indent=2))

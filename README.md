@@ -1,4 +1,4 @@
-# Trump Tweet Market Impact Classifier
+# General Market Impact Classifier
 
 A multi-layer NLP pipeline that classifies the market relevance and directional impact of political tweets on seven financial asset classes across three time horizons.
 
@@ -19,11 +19,13 @@ A multi-layer NLP pipeline that classifies the market relevance and directional 
 
 ## Project Overview
 
-Political communication on social media has become a direct driver of short-term market volatility. This system automatically processes tweets, determines whether they are market-relevant, and predicts the directional impact (bullish / bearish / flat) on seven global financial assets at 1-minute, 5-minute, and 10-minute horizons.
+Political communication on social media has become a direct driver of short-term market volatility. This system processes tweets in real time, determines whether they are market-relevant, and produces a **required LLM synthesis layer** that predicts the directional impact (bullish / bearish / flat) on seven global financial assets across 1-minute, 5-minute, and 10-minute horizons.
+
+The pipeline combines five statistical NLP layers (entity recognition, sentiment, event detection, graph reasoning) with 22 trained LightGBM classifiers, and a final **mandatory Azure OpenAI GPT-4o reasoning layer** that synthesizes all evidence and produces calibrated per-asset verdicts.
 
 ### Problem Statement
 
-Given a tweet text and optional temporal context, the system must answer:
+Given a tweet text and its timestamp, the system must answer:
 
 - Is this tweet market-relevant?
 - For each target asset, does the tweet predict upward, downward, or neutral price movement?
@@ -47,9 +49,10 @@ Given a tweet text and optional temporal context, the system must answer:
 | Named Entity Recognition | GLiNER (`urchade/gliner_medium-v2.1`) |
 | Financial Sentiment | FinBERT (`ProsusAI/finbert`) |
 | Event Classification | DistilBERT + Trainable Head |
-| Context Enrichment | Temporal heuristics + Tavily Search API |
+| Context Enrichment | Temporal heuristics + Tavily Search API (required) |
 | Graph Reasoning | NetworkX entity-event-asset graph |
 | Market Impact | LightGBM (21 per-asset classifiers) |
+| Final Synthesis (Required) | Azure OpenAI GPT-4o with Tavily live context |
 
 ---
 
@@ -88,7 +91,7 @@ Given a tweet text and optional temporal context, the system must answer:
                     │   │  Layer 4 — Context Enrichment                         │  │
                     │   │  Temporal: hour, market session, day-of-week          │  │
                     │   │  Textual: length, caps ratio, urgency signals         │  │
-                    │   │  Optional: Tavily macro news context                  │  │
+                    │   │  Tavily: live macro news context (required)           │  │
                     │   │  Output: 18 context features                          │  │
                     │   └──────────────────────────┬───────────────────────────┘  │
                     │                              │                               │
@@ -118,10 +121,37 @@ Given a tweet text and optional temporal context, the system must answer:
                     │    └─────────────────────────────────────────────────────┘  │
                     └──────────────────────────────┬──────────────────────────────┘
                                                    │
+                         LightGBM predictions per asset + all layer intermediates
+                                                   │
+                    ┌──────────────────────────────▼──────────────────────────────┐
+                    │              LAYER 7 — LLM Reasoning (Azure OpenAI GPT-4o) │
+                    │                                                              │
+                    │    ┌─────────────────────────────────────────────────────┐  │
+                    │    │   Real-Time Context Fetch (Tavily)                  │  │
+                    │    │   Timestamp-aware market news query                 │  │
+                    │    │   Grounds LLM in current conditions                 │  │
+                    │    └─────────────────────────────────────────────────────┘  │
+                    │                                                              │
+                    │    ┌─────────────────────────────────────────────────────┐  │
+                    │    │   Structured Prompt Assembly                        │  │
+                    │    │   Entities + sentiment + events + graph signals     │  │
+                    │    │   + LightGBM predictions + live news context        │  │
+                    │    └─────────────────────────────────────────────────────┘  │
+                    │                                                              │
+                    │    ┌─────────────────────────────────────────────────────┐  │
+                    │    │   Azure OpenAI GPT-4o                               │  │
+                    │    │   Reasons over all evidence                         │  │
+                    │    │   May agree or override LightGBM predictions        │  │
+                    │    │   Returns: direction + confidence + reasoning        │  │
+                    │    │            per asset + overall assessment            │  │
+                    │    └─────────────────────────────────────────────────────┘  │
+                    └──────────────────────────────┬──────────────────────────────┘
+                                                   │
                     ┌──────────────────────────────▼──────────────────────────────┐
                     │                    OUTPUT (TweetPrediction)                  │
                     │   is_market_relevant, relevance_score                        │
-                    │   Per-asset: direction, confidence, reasoning string          │
+                    │   assets (LightGBM): direction, confidence, reasoning        │
+                    │   llm_reasoning: per-asset GPT-4o verdict + assessment       │
                     └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -137,13 +167,16 @@ FinBERT is pre-trained on financial news corpora and produces positive, negative
 A frozen DistilBERT encoder feeds a lightweight two-layer classification head trained on pseudo-labeled tweets. Multi-label classification across 13 event categories. A hybrid approach merges model output with rule-based keyword patterns for robustness. Produces 27 features (one-hot + confidence per event type).
 
 **Layer 4 — Context Enrichment**
-Extracts temporal signals (trading session, hour-of-day, day-of-week), tweet stylistic signals (urgency, length, caps ratio), thread position features, and optionally retrieves live macroeconomic news snippets via the Tavily Search API. Produces 18 features.
+Extracts temporal signals (trading session, hour-of-day, day-of-week), tweet stylistic signals (urgency, length, caps ratio), and thread position features. Fetches live macroeconomic news snippets via the Tavily Search API and converts them into binary macro-theme flags. Produces 18 features.
 
 **Layer 5 — Entity-Event-Asset Graph Reasoning**
 Builds a directed weighted graph per tweet. Entity nodes and event nodes are connected by edges. Event-to-asset transmission rules (97 rules) encode domain knowledge about how event types propagate directional pressure to each asset. Sentiment compound score modulates signal strength by ±30%. Produces 21 graph topology and propagation features.
 
 **Prediction Layer — LightGBM Ensemble**
 One LightGBM binary classifier for relevance detection and 21 LightGBM multiclass classifiers (7 assets × 3 timeframes) for directional prediction. Trained with class-weight balancing to handle the skewed label distribution. All 22 models are independently serialized for incremental updates.
+
+**Layer 7 — LLM Reasoning (Azure OpenAI GPT-4o)**
+The final synthesis layer. Receives the complete outputs from all five feature extraction layers (raw entity objects, sentiment scores, event detections, graph propagation signals) alongside the LightGBM per-asset predictions. Fetches real-time market news via Tavily using a timestamp-aware query, assembles a structured prompt, and calls Azure OpenAI GPT-4o with `response_format: json_object` to produce a final per-asset direction, confidence, and reasoning. The LLM reasons over all evidence and may agree with or override individual LightGBM predictions. API errors are caught non-blocking so the pipeline always returns a complete result.
 
 ---
 
@@ -282,7 +315,7 @@ One LightGBM binary classifier for relevance detection and 21 LightGBM multiclas
   ┌──────────────────────────────────────────┐
   │  Layer 4: Context Enrichment             │
   │  Temporal heuristics (no model)          │  ~1ms / tweet
-  │  Optional Tavily API call                │  ~200–800ms if enabled
+  │  Tavily API call (live macro context)    │  ~200–800ms
   │  → ctx_ feature vector                   │
   └─────────────────┬────────────────────────┘
                     │
@@ -324,20 +357,50 @@ One LightGBM binary classifier for relevance detection and 21 LightGBM multiclas
   └─────────────────┬────────────────────────┘
                     │
                     ▼
+  ┌──────────────────────────────────────────┐
+  │  Layer 7: LLM Reasoning (REQUIRED)       │
+  │                                          │
+  │  Step 1: Fetch real-time context         │  ~200–800ms (Tavily, required)
+  │    - Build timestamp-aware search query  │
+  │    - Retrieve market news snippets       │
+  │                                          │
+  │  Step 2: Build structured prompt         │  ~1ms
+  │    - Entities, events, sentiment scores  │
+  │    - Graph signals per asset             │
+  │    - LightGBM predictions per asset      │
+  │    - Live Tavily news context            │
+  │                                          │
+  │  Step 3: Azure OpenAI GPT-4o call        │  ~1,500–4,000ms
+  │    - response_format: json_object        │
+  │    - Produces per-asset verdict          │
+  │    - May agree or override LightGBM      │
+  └─────────────────┬────────────────────────┘
+                    │
+                    ▼
   Output: TweetPrediction
   {
     is_market_relevant: bool,
     relevance_score: float,
     assets: {
-      gold:         { direction: +1, confidence: 0.72, reasoning: "..." },
-      equities:     { direction: -1, confidence: 0.65, reasoning: "..." },
+      gold:     { direction: +1, confidence: 0.72, reasoning: [...] },
+      equities: { direction: -1, confidence: 0.68, reasoning: [...] },
       ...
+    },
+    llm_reasoning: {
+      model_used: "renaiscent-gpt-4o",
+      latency_ms: 3800,
+      tavily_context_used: true,
+      overall_assessment: "...",
+      assets: {
+        gold:     { direction: 1, confidence: 0.75, reasoning: "...", agrees_with_lgbm: false },
+        equities: { direction: -1, confidence: 0.85, reasoning: "...", agrees_with_lgbm: true },
+        ...
+      }
     }
   }
 ```
 
-**Estimated Inference Latency (no Tavily)**: ~130–160ms per tweet
-**Estimated Inference Latency (with Tavily)**: ~330–960ms per tweet
+**Estimated Inference Latency — full pipeline**: ~2,000–5,000ms per tweet
 
 ---
 
@@ -361,7 +424,7 @@ Features are computed in five sequential layers that progressively extract riche
 
 **Event Features (27)**: Multi-label classification across 13 event categories. A one-hot indicator and a continuous confidence score are produced for each event type. The detector uses a trained DistilBERT classification head overlaid with 100+ regex rule patterns to improve recall on rare event types.
 
-**Context Features (18)**: Temporal features encode whether the tweet was posted during regular market hours, pre-market, or post-market sessions (Eastern Time). Stylistic features encode urgency signals (all-caps ratio, exclamation count, URL presence). Thread position and inter-tweet timing features capture rapid-fire posting behavior. An optional Tavily integration fetches recent news snippets and extracts binary flags for macroeconomic themes (tariffs, conflict, rate policy).
+**Context Features (18)**: Temporal features encode whether the tweet was posted during regular market hours, pre-market, or post-market sessions (Eastern Time). Stylistic features encode urgency signals (all-caps ratio, exclamation count, URL presence). Thread position and inter-tweet timing features capture rapid-fire posting behavior. Tavily fetches recent news snippets and extracts binary flags for macroeconomic themes (tariffs, conflict, rate policy).
 
 **Graph Features (21)**: A directed weighted graph connects entity nodes to event nodes and event nodes to asset nodes using 97 hand-coded transmission rules. Each rule specifies a direction multiplier and a weight. After signal propagation, sentiment compound score modulates each asset's net signal by ±30%. Graph topology metrics (density, clustering, centrality) are also included as features.
 
@@ -375,6 +438,7 @@ Features are computed in five sequential layers that progressively extract riche
 | Event Classification Head | 2-layer MLP | ~26K |
 | Relevance Classifier | LightGBM | 300 estimators |
 | Direction Classifiers (×21) | LightGBM | 300 estimators each |
+| LLM Synthesis (Layer 7) | Azure OpenAI GPT-4o | API (hosted) |
 
 ### Training Strategy
 
@@ -456,8 +520,10 @@ trading/
 │   │   └── context_enrichment.py   Layer 4: Temporal and macro context
 │   ├── graph_reasoning/
 │   │   └── entity_graph.py         Layer 5: Entity-event-asset graph reasoning
-│   └── market_impact/
-│       └── impact_predictor.py     Layer 6: LightGBM ensemble classifiers
+│   ├── market_impact/
+│   │   └── impact_predictor.py     Layer 6: LightGBM ensemble classifiers
+│   └── llm_reasoning/
+│       └── llm_reasoner.py         Layer 7: Azure OpenAI GPT-4o synthesis
 └── saved_models/
     ├── event_head.pt               Trained DistilBERT classification head
     ├── impact_predictor/
@@ -481,20 +547,51 @@ trading/
 
 ### Prerequisites
 
-Python 3.10+ is required. Install dependencies with:
+Python 3.10+ is required.
+
+**Step 1 — Create and activate a virtual environment**
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
-pip install torch transformers gliner lightgbm scikit-learn pandas numpy networkx tqdm
-# Optional: pip install tavily-python
+source .venv/bin/activate        # Linux / macOS
+# .venv\Scripts\activate         # Windows
 ```
 
-To enable Tavily macro context enrichment, set the API key:
+**Step 2 — Install dependencies**
 
 ```bash
-export TAVILY_API_KEY="your-key-here"
+pip install -r requirements.txt
 ```
+
+Or install manually:
+
+```bash
+pip install torch transformers gliner lightgbm scikit-learn \
+            pandas numpy networkx tqdm tavily-python openai python-dotenv
+```
+
+**Step 3 — Configure API keys via `.env`**
+
+Create a `.env` file in the project root (it is already git-ignored):
+
+```
+# Tavily — real-time market context
+TAVILY_API_KEY="your-tavily-key-here"
+
+# Azure OpenAI — Layer 7 LLM Reasoning
+AZURE_OPENAI_ENABLED=true
+AZURE_OPENAI_API_KEY="your-azure-openai-key"
+AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+AZURE_OPENAI_API_VERSION="2025-01-01-preview"
+AZURE_OPENAI_DEPLOYMENT_NAME="your-gpt4o-deployment-name"
+AZURE_OPENAI_MAX_TOKENS=2000
+AZURE_OPENAI_TEMPERATURE=0.1
+
+# Set to true to pass Tavily context into the LLM prompt (Layer 7)
+LLM_USE_TAVILY=false
+```
+
+The pipeline loads this file automatically on startup via `python-dotenv`. No `export` commands are needed.
 
 ### Training
 
@@ -509,7 +606,7 @@ python train_pipeline.py \
   --timeframes 1m 5m 10m
 ```
 
-Training with Tavily macro context (slower, requires API key):
+Training with Tavily macro context for richer feature extraction (requires `TAVILY_API_KEY` in `.env`):
 
 ```bash
 python train_pipeline.py \
@@ -534,71 +631,79 @@ python train_pipeline.py --data data/train.csv --no-gpu
 | `--test-size` | `0.2` | Fraction of data reserved for testing |
 | `--timeframes` | `1m 5m 10m` | Timeframes to train direction models for |
 | `--no-gpu` | False | Force CPU execution |
-| `--use-tavily-context` | False | Fetch live macro news during feature extraction |
+| `--use-tavily-context` | False | Fetch live macro news during feature extraction (Layer 4) |
 
 ### Inference
 
-Single tweet prediction:
+**Full pipeline prediction (requires Azure OpenAI keys + Tavily API in `.env`):**
 
 ```bash
 python inference_pipeline.py \
   --tweet "TARIFFS on China! 50% immediately!" \
   --model-dir saved_models \
-  --timeframe 5m
+  --timeframe 5m \
+  --use-llm-reasoning \
+  --llm-use-tavily
 ```
 
-Batch prediction from CSV:
+The above command runs the complete 7-layer pipeline with Layer 7 (GPT-4o) synthesis. This is the standard prediction mode.
+
+**Batch prediction from CSV:**
 
 ```bash
 python inference_pipeline.py \
   --csv data/new_tweets.csv \
   --output predictions_output.csv \
-  --timeframe 5m
+  --timeframe 5m \
+  --use-llm-reasoning \
+  --llm-use-tavily
 ```
 
-With live macro context (requires `TAVILY_API_KEY` to be set, otherwise `--use-tavily-context` is silently ignored):
+**All inference CLI arguments:**
 
-```bash
-export TAVILY_API_KEY="your-key-here"
-
-python inference_pipeline.py \
-  --tweet "Big announcement on trade deal with China" \
-  --model-dir saved_models \
-  --use-tavily-context
-```
-
-**Prediction Output Format**
-
-```
-Tweet: "TARIFFS on China! 50% immediately!"
-Market Relevant: True  (score: 0.94)
-
-Asset Predictions (5m horizon):
-  gold        →  BULLISH   (confidence: 0.71)  | graph_signal, ner_has_policy, event_trade_war
-  equities    →  BEARISH   (confidence: 0.68)  | event_trade_war, sentiment_compound, ner_has_country
-  btc         →  BULLISH   (confidence: 0.62)  | graph_signal, sentiment_compound
-  cl          →  FLAT      (confidence: 0.55)  | ner_entity_count, ctx_is_market_hours
-  wheat       →  BEARISH   (confidence: 0.64)  | event_trade_war, ner_has_country
-  eurodollar  →  BEARISH   (confidence: 0.59)  | ner_has_country, sentiment_negative
-  treasury_2y →  BULLISH   (confidence: 0.57)  | event_monetary_policy, graph_signal
-```
+| Argument | Default | Description |
+|---|---|---|
+| `--tweet` | — | Single tweet text to predict |
+| `--csv` | — | CSV file with a `content` column for batch prediction |
+| `--output` | `predictions_output.csv` | Output file for batch mode |
+| `--model-dir` | `saved_models` | Directory of trained models |
+| `--timeframe` | `5m` | Prediction horizon: `1m`, `5m`, or `10m` |
+| `--no-gpu` | False | Force CPU execution |
+| `--use-tavily-context` | False | Fetch Tavily news for Layer 4 feature engineering |
+| `--use-llm-reasoning` | True | Enable Layer 7 Azure OpenAI GPT-4o reasoning (required) |
+| `--llm-use-tavily` | False | Fetch real-time Tavily context for the LLM prompt (recommended) |
 
 ### Python API
 
 ```python
 from inference_pipeline import InferencePipeline
 
-pipeline = InferencePipeline.load("saved_models")
-
+# Load full pipeline with Layer 7 LLM Reasoning
+pipeline = InferencePipeline.load(
+    "saved_models",
+    use_llm_reasoning=True,
+    llm_use_tavily=True,         # fetch real-time Tavily context for LLM
+)
 result = pipeline.predict(
-    tweet="TARIFFS on China! 50% immediately!",
-    timeframe="5m"
+    "TARIFFS on China! 50% immediately!",
+    created_at="2019-05-06T08:00:00Z",
+    timeframe="5m",
 )
 
-print(result.is_market_relevant)          # True
-print(result.relevance_score)             # 0.94
-print(result.assets["gold"].direction)    # 1
-print(result.assets["gold"].confidence)   # 0.71
+# LightGBM predictions (Layer 6)
+print(result.is_market_relevant)                # True
+print(result.relevance_score)                   # 0.81
+print(result.predictions["equities"].direction) # -1
+print(result.predictions["equities"].confidence)# 0.51
+
+# GPT-4o synthesis (Layer 7)
+llm = result.llm_reasoning
+print(llm.overall_assessment)
+print(llm.per_asset["gold"].direction)          # 1 (may differ from LightGBM)
+print(llm.per_asset["gold"].reasoning)          # "Trade war escalation boosts safe-haven demand."
+print(llm.per_asset["gold"].agrees_with_lgbm)   # False
+print(llm.tavily_context_used)                  # True
+print(f"{llm.latency_ms:.0f}ms")                # ~3800ms
 ```
 
 ---
@@ -620,8 +725,11 @@ The entity-event-asset graph encodes structured financial domain knowledge that 
 **LightGBM over Deep Models for Final Prediction**
 With ~130 tabular features and 2,669 training samples, gradient-boosted trees are preferable to neural networks. LightGBM trains in seconds, handles class imbalance natively via class weights, provides interpretable feature importances used for reasoning generation, and avoids overfitting risks that come with fine-tuning large transformers on small datasets.
 
-**Tavily Integration**
-Live macro context retrieval improves feature richness for tweets that reference ongoing news events, but adds latency and cost. The integration is opt-in and gracefully degrades — if the API is unavailable, context features default to zero without failing the pipeline.
+**Tavily for Real-Time Market Context (Layers 4 and 7, Required)**
+Tavily is an essential component used in two distinct places. In Layer 4, a keyword-based query fetches macro news snippets that are converted into binary feature flags feeding the LightGBM models. In Layer 7, a richer timestamp-aware query fetches current market news injected verbatim into the GPT-4o prompt. The two queries are intentionally different in scope — Layer 4 produces structured numerical signals, Layer 7 provides natural-language grounding for the LLM. Both require `TAVILY_API_KEY` set in `.env`.
+
+**Azure OpenAI GPT-4o as Final Synthesis (Layer 7, Required)**
+The LLM layer is a **required integral component** that addresses two limitations of the statistical models: (1) LightGBM cannot reason about novel event combinations not seen in training data, and (2) feature importance-based reasoning is shallow. GPT-4o receives the full structured evidence from all layers and produces calibrated judgements with natural-language explanations. Using `response_format: json_object` ensures reliable structured output. Requires `AZURE_OPENAI_*` variables set in `.env`.
 
 **Feature Caching**
 Transformer inference is the dominant cost during training. Feature dictionaries for all tweets are serialized to JSON after extraction. This allows re-running LightGBM training, hyperparameter tuning, or evaluation experiments in seconds without re-running the full transformer stack.
