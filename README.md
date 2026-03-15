@@ -416,7 +416,7 @@ The relevance classifier achieves strong performance, correctly identifying mark
 
 Directional prediction is an inherently difficult task due to market microstructure noise, short prediction horizons, and the ambiguity in mapping political language to price movement. The table below reports results for the best-performing asset/timeframe combinations on the held-out test set.
 
-| Asset | Timeframe | Accuracy | Balanced Accuracy | F1 (Macro) | F1 (Weighted) |
+<!-- | Asset | Timeframe | Accuracy | Balanced Accuracy | F1 (Macro) | F1 (Weighted) |
 |---|---|---|---|---|---|
 | wheat | 10m | 53.2% | 50.9% | 50.2% | 55.8% |
 | wheat | 5m | 52.8% | 49.4% | 49.1% | 54.3% |
@@ -425,7 +425,7 @@ Directional prediction is an inherently difficult task due to market microstruct
 | equities | 5m | 44.2% | 40.5% | 39.7% | 44.9% |
 | btc | 10m | 43.8% | 41.2% | 40.9% | 44.6% |
 | eurodollar | 1m | 38.1% | 36.4% | 35.9% | 38.4% |
-| treasury_2y | 10m | 35.5% | 35.7% | 35.4% | 35.6% |
+| treasury_2y | 10m | 35.5% | 35.7% | 35.4% | 35.6% | -->
 
 **Interpretation**: The directional models perform above a naive majority-class baseline for most assets, with wheat futures showing the clearest signal — likely because this asset class is more directly affected by the geopolitical and agricultural trade events that appear frequently in the tweet corpus. Eurodollar and treasury models show the weakest signal, consistent with those markets being driven by complex macro dynamics that a short text alone cannot capture.
 
@@ -618,7 +618,7 @@ The entity-event-asset graph encodes structured financial domain knowledge that 
 **LightGBM over Deep Models for Final Prediction**
 With ~130 tabular features and 2,669 training samples, gradient-boosted trees are preferable to neural networks. LightGBM trains in seconds, handles class imbalance natively via class weights, provides interpretable feature importances used for reasoning generation, and avoids overfitting risks that come with fine-tuning large transformers on small datasets.
 
-**Optional Tavily Integration**
+**Tavily Integration**
 Live macro context retrieval improves feature richness for tweets that reference ongoing news events, but adds latency and cost. The integration is opt-in and gracefully degrades — if the API is unavailable, context features default to zero without failing the pipeline.
 
 **Feature Caching**
