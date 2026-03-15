@@ -1,0 +1,15 @@
+numpy==2.4.2
+pandas==3.0.0
+torch==2.10.0
+transformers==5.0.0
+gliner==0.2.24
+lightgbm==4.6.0
+scikit-learn==1.8.0
+networkx==3.6.1
+tqdm==4.67.2
+tavily-python==0.7.23
+python-dotenv==1.2.2
+matplotlib==3.10.8
+seaborn==0.13.2
+shap==0.51.0
+openpyxl==3.1.5
