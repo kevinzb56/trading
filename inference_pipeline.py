@@ -25,6 +25,13 @@ import time
 from pathlib import Path
 from typing import Optional
 
+# Load .env file if present (so TAVILY_API_KEY can be set there instead of shell)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import numpy as np
 import pandas as pd
 

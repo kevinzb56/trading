@@ -556,9 +556,11 @@ python inference_pipeline.py \
   --timeframe 5m
 ```
 
-With live macro context:
+With live macro context (requires `TAVILY_API_KEY` to be set, otherwise `--use-tavily-context` is silently ignored):
 
 ```bash
+export TAVILY_API_KEY="your-key-here"
+
 python inference_pipeline.py \
   --tweet "Big announcement on trade deal with China" \
   --model-dir saved_models \
