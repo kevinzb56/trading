@@ -5,7 +5,7 @@ Evaluation of the complete 7-layer pipeline on the held-out test set.
 - **Layer 6 (LightGBM)** evaluated on: **667 samples** (full test set)
 - **Layer 7 (GPT-4o LLM)** evaluated on: **667 samples** (full test set — same 667 as Layer 6)
 - **Timeframe for LLM evaluation**: `5m`
-- **Average LLM latency**: 3.7s / tweet
+- **Average LLM latency**: 4.4s / tweet
 
 ---
 
@@ -66,29 +66,29 @@ Global averages across all 7 assets and 3 timeframes:
 
 | Metric | LightGBM (Layer 6) | GPT-4o (Layer 7) |
 |---|---|---|
-| Mean Accuracy | 44.61% | **22.04%** |
-| Mean F1 (Macro) | 34.92% | **14.10%** |
-| LightGBM–LLM Agreement | — | 21.52% |
+| Mean Accuracy | 44.66% | **23.17%** |
+| Mean F1 (Macro) | 34.95% | **16.13%** |
+| LightGBM–LLM Agreement | — | 24.35% |
 
 ### Relevance Classification (LLM sample)
 
 | Metric | LightGBM | GPT-4o |
 |---|---|---|
-| Accuracy | 86.96% | **85.61%** |
-| Recall | 57.75% | **45.77%** |
-| F1 (Weighted) | 86.30% | **84.14%** |
+| Accuracy | 86.96% | **88.01%** |
+| Recall | 57.75% | **55.63%** |
+| F1 (Weighted) | 86.30% | **87.10%** |
 
 ### Per-Asset Direction Comparison
 
 | Asset | LGBM Acc | LLM Acc | LGBM F1 | LLM F1 | Agreement |
 |---|---|---|---|---|---|
-| gold | 42.58% | **10.79%** | 27.63% | **10.46%** | 7.05% |
-| equities | 44.68% | **13.94%** | 34.38% | **12.51%** | 10.19% |
-| btc | 47.98% | **4.95%** | 33.74% | **3.84%** | 6.30% |
-| cl | 40.48% | **17.84%** | 30.72% | **15.64%** | 12.14% |
-| wheat | 53.37% | **55.47%** | 42.33% | **24.28%** | 57.72% |
-| eurodollar | 45.88% | **13.79%** | 40.70% | **9.86%** | 15.89% |
-| treasury_2y | 37.33% | **37.48%** | 34.96% | **22.10%** | 41.38% |
+| gold | 42.58% | **11.84%** | 27.63% | **12.12%** | 10.19% |
+| equities | 44.83% | **15.29%** | 34.50% | **14.43%** | 12.59% |
+| btc | 47.98% | **6.60%** | 33.74% | **6.12%** | 10.49% |
+| cl | 40.48% | **18.59%** | 30.72% | **16.85%** | 14.39% |
+| wheat | 53.52% | **56.07%** | 42.42% | **26.17%** | 58.92% |
+| eurodollar | 45.88% | **16.04%** | 40.70% | **13.64%** | 20.39% |
+| treasury_2y | 37.33% | **37.78%** | 34.96% | **23.56%** | 43.48% |
 
 ---
 

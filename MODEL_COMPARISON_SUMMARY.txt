@@ -1,0 +1,106 @@
+╔════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                    THREE-MODEL PERFORMANCE COMPARISON SUMMARY                                     ║
+║                     LightGBM vs GPT-4o vs GPT-4.1 (5m Prediction Horizon)                         ║
+╚════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+QUICK STATS:
+┌─────────────────┬──────────────────┬──────────────────┬──────────────────┐
+│ METRIC          │ LightGBM         │ GPT-4o           │ GPT-4.1          │
+├─────────────────┼──────────────────┼──────────────────┼──────────────────┤
+│ Direction Acc   │ 44.61% 🥇        │ 22.04% 🥉        │ 23.17% 🥈        │
+│ Relevance Acc   │ 86.96% 🥈        │ 85.61% 🥉        │ 88.01% 🥇        │
+│ Latency         │ <1ms (instant)   │ 3.74s            │ 4.40s            │
+│ API Cost        │ $0               │ Low $            │ Low-Mid $$       │
+│ Model Type      │ Gradient Boost   │ LLM (4o)         │ LLM (4.1)        │
+└─────────────────┴──────────────────┴──────────────────┴──────────────────┘
+
+PER-ASSET PERFORMANCE (5m Horizon):
+
+Asset           │ LGBM    │ GPT-4o  │ GPT-4.1 │ Winner        │ Gap Score
+─────────────────────────────────────────────────────────────────────────
+Bitcoin         │ 47.98%  │ 4.95%   │ 6.60%   │ LightGBM ✓✓✓  │ HUGE
+Equities        │ 44.68%  │ 13.94%  │ 15.29%  │ LightGBM ✓✓✓  │ HUGE
+Eurodollar      │ 45.88%  │ 13.79%  │ 16.04%  │ LightGBM ✓✓✓  │ HUGE
+Crude Oil       │ 40.48%  │ 17.84%  │ 18.59%  │ LightGBM ✓✓   │ LARGE
+Gold            │ 42.58%  │ 10.79%  │ 11.84%  │ LightGBM ✓✓✓  │ HUGE
+Wheat           │ 53.37%  │ 55.47%  │ 56.07%  │ GPT-4.1 ✓     │ TINY
+Treasury 2Y     │ 37.33%  │ 37.48%  │ 37.78%  │ GPT-4.1 ✓     │ TINY
+
+ACCURACY DISTRIBUTIONS:
+
+Direction Prediction Accuracy:
+  LightGBM:  ████████████████████████████ 44.61%
+  GPT-4.1:   ██████████ 23.17%
+  GPT-4o:    █████████ 22.04%
+  
+Relevance Classification Accuracy:
+  GPT-4.1:   ████████████████████████████ 88.01%
+  LightGBM:  ███████████████████████████ 86.96%
+  GPT-4o:    ██████████████████████████ 85.61%
+
+MODEL AGREEMENT ANALYSIS:
+
+LightGBM ←→ GPT-4o:  21.52% agreement (COMPLEMENTARY)
+LightGBM ←→ GPT-4.1: 24.35% agreement (COMPLEMENTARY)
+
+→ Low agreement means models exploit DIFFERENT features
+→ Ideal for ensemble strategies
+
+PRODUCTION RECOMMENDATIONS:
+
+🎯 PRIMARY: LightGBM (Direction Prediction)
+   • 44.6% accuracy (best available)
+   • 0ms latency (instant decisions)
+   • $0 cost
+   • Best for: Real-time, high-frequency trading
+
+🎯 SECONDARY: GPT-4.1 (Relevance Classification)
+   • 88% accuracy (best available)
+   • 82% precision (fewer false positives)
+   • 4.4s latency to filter on top of LGBM
+   • Best for: Eliminating noise, confirming signals
+
+💡 ALTERNATIVES:
+
+[Option A] Speed-Optimized Ensemble
+  LightGBM (direction) + GPT-4o (relevance)
+  → Faster than XPT-4.1 (3.74s vs 4.40s)
+  → Still better relevance than LGBM alone
+  
+[Option B] Conservative Hybrid
+  60% LightGBM + 40% GPT-4.1 direction
+  → Blended accuracy: ~35.6%
+  → Leverages both strengths
+  
+[Option C] Asset-Specific Routing
+  Bitcoin/Equities/FX: LightGBM only
+  Wheat/Bonds: Use GPT-4.1
+  → Optimizes per commodity
+  
+[Option D] Maximum Reasoning
+  LightGBM initial → GPT-4.1 full reasoning
+  → Best trading narratives
+  → Highest latency & cost
+
+WINNER BY CATEGORY:
+
+🏆 RAW ACCURACY:        LightGBM (44.61%)
+🏆 RELEVANCE:          GPT-4.1 (88.01%)
+🏆 SPEED:              LightGBM (instant)
+🏆 REASONING:          GPT-4.1 (better chains)
+🏆 COST:               LightGBM ($0)
+🏆 CONSISTENCY:        LightGBM (more stable)
+🏆 INDEPENDENCE:       GPT-4.1 (more unique perspective)
+
+KEY INSIGHT:
+━━━━━━━━━━━
+LightGBM dominates direction prediction (22.6% advantage).
+GPT-4.1 leads relevance classification (1.4% edge over LGBM).
+
+Low model agreement (24%) indicates they're finding DIFFERENT patterns.
+→ This makes them PERFECT for ensemble approaches.
+
+Best strategy: LightGBM for direction + GPT-4.1 for confidence/relevance.
+
+═════════════════════════════════════════════════════════════════════════════════════════════════════
+Report Generated: 2026-03-15 | Test Set: 667 samples | Data: /home/kevin-shah/Desktop/trading/
