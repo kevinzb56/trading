@@ -111,21 +111,61 @@ class MarketImpactPredictor:
             df = df[self.feature_names]
         return df
 
+    # Ensemble configs: diverse hyperparameter sets trained together, soft-voted at prediction time
+    _ENSEMBLE_CONFIGS = [
+        dict(n_estimators=800, max_depth=6,  learning_rate=0.02, num_leaves=47,
+             subsample=0.8, colsample_bytree=0.7, min_child_samples=15,
+             reg_alpha=0.05, reg_lambda=0.1,  boosting_type="gbdt"),
+        dict(n_estimators=600, max_depth=8,  learning_rate=0.03, num_leaves=63,
+             subsample=0.7, colsample_bytree=0.8, min_child_samples=10,
+             reg_alpha=0.1,  reg_lambda=0.05, boosting_type="gbdt"),
+        dict(n_estimators=500, max_depth=5,  learning_rate=0.05, num_leaves=31,
+             subsample=0.9, colsample_bytree=0.6, min_child_samples=20,
+             reg_alpha=0.2,  reg_lambda=0.2,  boosting_type="gbdt"),
+        dict(n_estimators=700, max_depth=7,  learning_rate=0.025, num_leaves=55,
+             subsample=0.75, colsample_bytree=0.75, min_child_samples=12,
+             reg_alpha=0.08, reg_lambda=0.08, boosting_type="dart",
+             drop_rate=0.1,  skip_drop=0.5),
+        dict(n_estimators=400, max_depth=4,  learning_rate=0.08, num_leaves=24,
+             subsample=0.85, colsample_bytree=0.65, min_child_samples=25,
+             reg_alpha=0.15, reg_lambda=0.15, boosting_type="gbdt"),
+    ]
+
+    def _compute_sample_weights(self, y_mapped: np.ndarray,
+                                neutral_boost: float = 5.0) -> np.ndarray:
+        """
+        Compute per-sample weights with an extra boost for the neutral class,
+        which is heavily under-represented (~10% of data).
+        """
+        class_counts = np.bincount(y_mapped, minlength=3)
+        total = len(y_mapped)
+        base_weights = {i: total / (3 * max(c, 1)) for i, c in enumerate(class_counts)}
+        # Apply extra multiplier to neutral (class index 1 = original label 0)
+        base_weights[1] = base_weights[1] * neutral_boost
+        return np.array([base_weights[yi] for yi in y_mapped])
+
     def train(
         self,
         feature_dicts: list,
         labels_df: pd.DataFrame,
         timeframes: Optional[list] = None,
         n_splits: int = 5,
+        tune: bool = False,
+        tune_trials: int = 30,
     ) -> dict:
         """
         Train classifiers for all assets and timeframes.
 
+        Uses a soft-voting ensemble of diverse LightGBM configs with boosted
+        neutral-class weighting, early stopping, and optional Optuna tuning.
+
         Args:
-            feature_dicts: list of dicts from feature extraction
-            labels_df: DataFrame with actual direction columns
-            timeframes: which timeframes to train (default: all)
-            n_splits: number of CV folds
+            feature_dicts:  list of dicts from feature extraction
+            labels_df:      DataFrame with actual direction columns
+            timeframes:     which timeframes to train (default: all)
+            n_splits:       number of CV folds
+            tune:           run Optuna hyperparameter search (slower)
+            tune_trials:    number of Optuna trials per model when tune=True
 
         Returns:
             Dictionary of evaluation metrics.
@@ -136,8 +176,8 @@ class MarketImpactPredictor:
             logger.error("LightGBM not installed. pip install lightgbm")
             raise
 
-        from sklearn.model_selection import StratifiedKFold
-        from sklearn.metrics import accuracy_score, f1_score, classification_report
+        from sklearn.model_selection import StratifiedKFold, train_test_split
+        from sklearn.metrics import accuracy_score, f1_score
 
         if timeframes is None:
             timeframes = TIMEFRAMES
@@ -148,14 +188,14 @@ class MarketImpactPredictor:
 
         metrics = {}
 
-        # Train relevance classifier
+        # ── Relevance classifier ──────────────────────────────────────────────
         logger.info("Training relevance classifier...")
         if "is_market_relevant" in labels_df.columns:
             y_rel = labels_df["is_market_relevant"].astype(int).values
             self.relevance_model = lgb.LGBMClassifier(
-                n_estimators=200, max_depth=6, learning_rate=0.05,
-                subsample=0.8, colsample_bytree=0.8,
-                class_weight="balanced", random_state=42, verbose=-1,
+                n_estimators=400, max_depth=6, learning_rate=0.04,
+                subsample=0.8, colsample_bytree=0.8, num_leaves=47,
+                class_weight="balanced", random_state=42, verbose=-1, n_jobs=-1,
             )
             self.relevance_model.fit(X, y_rel)
             rel_pred = self.relevance_model.predict(X)
@@ -165,7 +205,7 @@ class MarketImpactPredictor:
             }
             logger.info(f"  Relevance acc={metrics['relevance']['accuracy']:.3f}")
 
-        # Train per-asset direction classifiers
+        # ── Direction classifiers ─────────────────────────────────────────────
         for asset in ASSETS:
             for tf in timeframes:
                 label_col = self._get_label_col(asset, tf)
@@ -174,76 +214,158 @@ class MarketImpactPredictor:
                     continue
 
                 y = labels_df[label_col].values
-                # Map -1, 0, 1 to 0, 1, 2 for LightGBM
                 y_mapped = y + 1  # {-1,0,1} -> {0,1,2}
+                class_counts = np.bincount(y_mapped, minlength=3)
+                sample_weights = self._compute_sample_weights(y_mapped)
 
                 logger.info(f"Training {asset}/{tf}: {len(y)} samples, "
-                            f"class dist={np.bincount(y_mapped, minlength=3)}")
+                            f"class dist={class_counts}")
 
-                # Compute class weights
-                class_counts = np.bincount(y_mapped, minlength=3)
-                total = len(y_mapped)
-                class_weights = {i: total / (3 * max(c, 1)) for i, c in enumerate(class_counts)}
-                sample_weights = np.array([class_weights[yi] for yi in y_mapped])
+                # ── Optional Optuna tuning ────────────────────────────────────
+                if tune:
+                    best_params = self._tune_hyperparams(
+                        X, y_mapped, sample_weights, n_splits, tune_trials, asset, tf
+                    )
+                    ensemble_configs = [best_params] + self._ENSEMBLE_CONFIGS[:3]
+                else:
+                    ensemble_configs = self._ENSEMBLE_CONFIGS
 
-                model = lgb.LGBMClassifier(
-                    n_estimators=300,
-                    max_depth=7,
-                    learning_rate=0.03,
-                    subsample=0.8,
-                    colsample_bytree=0.7,
-                    min_child_samples=20,
-                    reg_alpha=0.1,
-                    reg_lambda=0.1,
-                    num_leaves=63,
-                    random_state=42,
-                    verbose=-1,
-                    n_jobs=-1,
-                )
-
-                # Cross-validation
+                # ── Cross-validation with ensemble ────────────────────────────
                 skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
                 cv_accs, cv_f1s = [], []
-                for train_idx, val_idx in skf.split(X, y_mapped):
+
+                for fold, (train_idx, val_idx) in enumerate(skf.split(X, y_mapped)):
                     X_tr, X_val = X.iloc[train_idx], X.iloc[val_idx]
                     y_tr, y_val = y_mapped[train_idx], y_mapped[val_idx]
                     sw_tr = sample_weights[train_idx]
 
-                    model_cv = lgb.LGBMClassifier(
-                        n_estimators=300, max_depth=7, learning_rate=0.03,
-                        subsample=0.8, colsample_bytree=0.7, min_child_samples=20,
-                        reg_alpha=0.1, reg_lambda=0.1, num_leaves=63,
-                        random_state=42, verbose=-1, n_jobs=-1,
+                    # Sub-split train for early stopping
+                    X_train_es, X_es, y_train_es, y_es, sw_es, _ = train_test_split(
+                        X_tr, y_tr, sw_tr, test_size=0.15,
+                        stratify=y_tr, random_state=fold,
                     )
-                    model_cv.fit(X_tr, y_tr, sample_weight=sw_tr)
-                    y_pred = model_cv.predict(X_val)
+
+                    fold_probas = []
+                    for cfg in ensemble_configs:
+                        es_rounds = 50 if cfg.get("boosting_type") != "dart" else None
+                        m = lgb.LGBMClassifier(
+                            **cfg, random_state=42, verbose=-1, n_jobs=-1,
+                        )
+                        fit_kw = dict(sample_weight=sw_es)
+                        if es_rounds:
+                            fit_kw.update(
+                                eval_set=[(X_es, y_es)],
+                                callbacks=[lgb.early_stopping(es_rounds, verbose=False),
+                                           lgb.log_evaluation(-1)],
+                            )
+                        m.fit(X_train_es, y_train_es, **fit_kw)
+                        fold_probas.append(m.predict_proba(X_val))
+
+                    avg_proba = np.mean(fold_probas, axis=0)
+                    y_pred = np.argmax(avg_proba, axis=1)
                     cv_accs.append(accuracy_score(y_val, y_pred))
                     cv_f1s.append(f1_score(y_val, y_pred, average="weighted"))
 
-                # Train final model on all data
-                model.fit(X, y_mapped, sample_weight=sample_weights)
-                self.models[(asset, tf)] = model
-
-                # Store feature importance
-                importance = model.feature_importances_
-                self.feature_importance[(asset, tf)] = dict(
-                    zip(self.feature_names, importance)
+                # ── Train final ensemble on all data ──────────────────────────
+                # Sub-split for early stopping on full dataset
+                X_main, X_es_full, y_main, y_es_full, sw_main, _ = train_test_split(
+                    X, y_mapped, sample_weights, test_size=0.12,
+                    stratify=y_mapped, random_state=99,
                 )
 
-                # Full-data metrics (overfit metric, for reference)
-                y_pred_full = model.predict(X)
+                final_models = []
+                for cfg in ensemble_configs:
+                    es_rounds = 50 if cfg.get("boosting_type") != "dart" else None
+                    m = lgb.LGBMClassifier(**cfg, random_state=42, verbose=-1, n_jobs=-1)
+                    fit_kw = dict(sample_weight=sw_main)
+                    if es_rounds:
+                        fit_kw.update(
+                            eval_set=[(X_es_full, y_es_full)],
+                            callbacks=[lgb.early_stopping(es_rounds, verbose=False),
+                                       lgb.log_evaluation(-1)],
+                        )
+                    m.fit(X_main, y_main, **fit_kw)
+                    final_models.append(m)
+
+                self.models[(asset, tf)] = final_models
+
+                # Feature importance: average across ensemble
+                avg_importance = np.mean(
+                    [m.feature_importances_ for m in final_models], axis=0
+                )
+                self.feature_importance[(asset, tf)] = dict(
+                    zip(self.feature_names, avg_importance)
+                )
+
+                # Full-data ensemble accuracy (in-sample reference)
+                full_probas = np.mean(
+                    [m.predict_proba(X) for m in final_models], axis=0
+                )
+                y_pred_full = np.argmax(full_probas, axis=1)
                 metrics[f"{asset}_{tf}"] = {
-                    "cv_accuracy": np.mean(cv_accs),
-                    "cv_f1": np.mean(cv_f1s),
-                    "cv_accuracy_std": np.std(cv_accs),
-                    "train_accuracy": accuracy_score(y_mapped, y_pred_full),
-                    "train_f1": f1_score(y_mapped, y_pred_full, average="weighted"),
+                    "cv_accuracy": float(np.mean(cv_accs)),
+                    "cv_f1": float(np.mean(cv_f1s)),
+                    "cv_accuracy_std": float(np.std(cv_accs)),
+                    "train_accuracy": float(accuracy_score(y_mapped, y_pred_full)),
+                    "train_f1": float(f1_score(y_mapped, y_pred_full, average="weighted")),
                     "class_dist": class_counts.tolist(),
+                    "n_ensemble_models": len(final_models),
                 }
-                logger.info(f"  {asset}/{tf}: CV_acc={np.mean(cv_accs):.3f}±{np.std(cv_accs):.3f}, "
-                            f"CV_f1={np.mean(cv_f1s):.3f}")
+                logger.info(
+                    f"  {asset}/{tf}: CV_acc={np.mean(cv_accs):.3f}±{np.std(cv_accs):.3f}, "
+                    f"CV_f1={np.mean(cv_f1s):.3f}  [{len(final_models)}-model ensemble]"
+                )
 
         return metrics
+
+    def _tune_hyperparams(
+        self,
+        X: pd.DataFrame,
+        y_mapped: np.ndarray,
+        sample_weights: np.ndarray,
+        n_splits: int,
+        n_trials: int,
+        asset: str,
+        tf: str,
+    ) -> dict:
+        """Run Optuna to find best hyperparameters for one asset/timeframe."""
+        try:
+            import optuna
+            import lightgbm as lgb
+            from sklearn.model_selection import StratifiedKFold
+            from sklearn.metrics import accuracy_score
+            optuna.logging.set_verbosity(optuna.logging.WARNING)
+        except ImportError:
+            logger.warning("optuna not installed; skipping tuning. pip install optuna")
+            return self._ENSEMBLE_CONFIGS[0]
+
+        def objective(trial):
+            params = dict(
+                n_estimators=trial.suggest_int("n_estimators", 300, 1000),
+                max_depth=trial.suggest_int("max_depth", 4, 10),
+                learning_rate=trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+                num_leaves=trial.suggest_int("num_leaves", 20, 80),
+                subsample=trial.suggest_float("subsample", 0.6, 1.0),
+                colsample_bytree=trial.suggest_float("colsample_bytree", 0.5, 1.0),
+                min_child_samples=trial.suggest_int("min_child_samples", 5, 30),
+                reg_alpha=trial.suggest_float("reg_alpha", 0.01, 0.5, log=True),
+                reg_lambda=trial.suggest_float("reg_lambda", 0.01, 0.5, log=True),
+            )
+            skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+            accs = []
+            for train_idx, val_idx in skf.split(X, y_mapped):
+                X_tr, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_tr, y_val = y_mapped[train_idx], y_mapped[val_idx]
+                m = lgb.LGBMClassifier(**params, random_state=42, verbose=-1, n_jobs=-1)
+                m.fit(X_tr, y_tr, sample_weight=sample_weights[train_idx])
+                accs.append(accuracy_score(y_val, m.predict(X_val)))
+            return float(np.mean(accs))
+
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+        logger.info(f"  Optuna {asset}/{tf}: best CV acc={study.best_value:.3f} "
+                    f"params={study.best_params}")
+        return study.best_params
 
     def predict(self, feature_dict: dict, timeframe: Optional[str] = None) -> dict:
         """
@@ -274,8 +396,11 @@ class MarketImpactPredictor:
                 )
                 continue
 
-            model = self.models[key]
-            proba = model.predict_proba(X)[0]  # [P(-1), P(0), P(1)]
+            models = self.models[key]
+            # Support both legacy single model and new ensemble list
+            if not isinstance(models, list):
+                models = [models]
+            proba = np.mean([m.predict_proba(X)[0] for m in models], axis=0)
             pred_class = int(np.argmax(proba))
             direction = pred_class - 1  # map back: {0,1,2} -> {-1,0,1}
             confidence = float(proba[pred_class])
@@ -381,11 +506,11 @@ class MarketImpactPredictor:
         save_dir = Path(path)
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save models
+        # Save models (ensemble list or legacy single model)
         for (asset, tf), model in self.models.items():
             model_path = save_dir / f"model_{asset}_{tf}.pkl"
             with open(model_path, "wb") as f:
-                pickle.dump(model, f)
+                pickle.dump(model, f)   # saves list or single model transparently
 
         # Save relevance model
         if self.relevance_model is not None:
