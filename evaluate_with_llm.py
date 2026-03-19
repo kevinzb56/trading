@@ -167,6 +167,46 @@ def evaluate_layer6(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Thread context builder
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_thread_contexts(df: pd.DataFrame, window: int = 5) -> list:
+    """
+    For each tweet in df (sorted by created_at), build a list of surrounding
+    tweets (±window) to provide escalation / topic context to the LLM.
+
+    Returns a list of thread_context lists, one per row in df.
+    Each thread_context entry: {"content": str, "created_at": str, "offset": int}
+    Offset 0 = target tweet, negative = before, positive = after.
+    """
+    # Sort by timestamp for correct ordering
+    df = df.copy()
+    if "created_at" in df.columns:
+        df["_sort_ts"] = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
+        df = df.sort_values("_sort_ts").reset_index(drop=True)
+
+    contents = df["content"].fillna("").astype(str).tolist()
+    timestamps = df["created_at"].fillna("").astype(str).tolist() \
+        if "created_at" in df.columns else [""] * len(df)
+
+    thread_contexts = []
+    for i in range(len(df)):
+        ctx = []
+        for offset in range(-window, window + 1):
+            j = i + offset
+            if j < 0 or j >= len(df):
+                continue
+            ctx.append({
+                "content": contents[j][:200],
+                "created_at": timestamps[j][:16],
+                "offset": offset,
+            })
+        thread_contexts.append(ctx)
+
+    return thread_contexts
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Checkpoint helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -197,6 +237,9 @@ def evaluate_layer7(
     use_gpu: bool = True,
     checkpoint_path: Path = None,
     checkpoint_every: int = 10,
+    use_thread_context: bool = True,
+    architecture_label: str = "new",
+    use_tavily: bool = True,
 ) -> dict:
     """
     Evaluate Layer 7 (GPT-4o) on test tweets.
@@ -211,14 +254,20 @@ def evaluate_layer7(
     logger.info(f"Evaluating Layer 7 (LLM) on {n} test tweets (timeframe={timeframe}) ...")
     logger.info("Loading full pipeline (may take 30-60s for transformers)...")
 
+    # Respect LLM_USE_TAVILY env var; can be overridden by caller via use_tavily param
+    env_tavily = os.getenv("LLM_USE_TAVILY", "true").lower() == "true"
+    effective_tavily = use_tavily and env_tavily
+    tavily_key = os.getenv("TAVILY_API_KEY") if effective_tavily else None
+    logger.info(f"Tavily: {'enabled' if effective_tavily else 'disabled'}")
+
     pipeline = InferencePipeline.load(
         model_dir,
         use_gpu=use_gpu,
         target_timeframe=timeframe,
-        use_tavily_context=True,
-        tavily_api_key=os.getenv("TAVILY_API_KEY"),
+        use_tavily_context=effective_tavily,
+        tavily_api_key=tavily_key,
         use_llm_reasoning=True,
-        llm_use_tavily=True,
+        llm_use_tavily=effective_tavily,
     )
 
     results_per_asset = {asset: {"y_true": [], "y_pred_lgbm": [], "y_pred_llm": []}
@@ -248,6 +297,13 @@ def evaluate_layer7(
     timestamps = sample_df["created_at"].fillna("").astype(str).tolist() \
         if "created_at" in sample_df.columns else [""] * n
 
+    # Build tweet thread context (±5 surrounding tweets for escalation detection)
+    if use_thread_context:
+        logger.info("Building tweet thread contexts (±5 surrounding tweets per tweet)...")
+        thread_contexts = build_thread_contexts(sample_df, window=5)
+    else:
+        thread_contexts = [None] * n
+
     for i in range(start_i, n):
         text, ts = texts[i], timestamps[i]
         elapsed_so_far = sum(timings)
@@ -261,7 +317,11 @@ def evaluate_layer7(
         t0 = time.time()
 
         try:
-            result = pipeline.predict(text, created_at=ts)
+            result = pipeline.predict(
+                text,
+                created_at=ts,
+                thread_context=thread_contexts[i],
+            )
         except Exception as e:
             logger.warning(f"  Skipping row {i}: {e}")
             skipped += 1
@@ -384,6 +444,8 @@ def evaluate_layer7(
 
     return {
         "timeframe": timeframe,
+        "architecture": architecture_label,
+        "use_thread_context": use_thread_context,
         "per_asset": asset_metrics,
         "agreement_rates": agreement_rates,
         "relevance": rel_metrics,
@@ -403,6 +465,7 @@ def write_report(
     llm_samples: int,
     total_test: int = 667,
     report_path: Path = None,
+    old_layer7: dict = None,
 ):
     lines = [
         "# Full Pipeline Evaluation Report",
@@ -504,18 +567,76 @@ def write_report(
     lines += [
         "### Per-Asset Direction Comparison",
         "",
-        f"| Asset | LGBM Acc | LLM Acc | LGBM F1 | LLM F1 | Agreement |",
-        f"|---|---|---|---|---|---|",
     ]
-    for asset in ASSETS:
-        if asset not in layer7.get("per_asset", {}):
-            continue
-        m = layer7["per_asset"][asset]
-        agr = layer7["agreement_rates"].get(asset, 0)
+
+    has_old = old_layer7 is not None and old_layer7.get("per_asset")
+    new_arch = layer7.get("architecture", "new (thread + yfinance)")
+    old_arch = old_layer7.get("architecture", "old LLM") if has_old else "old LLM"
+
+    if has_old:
+        lines += [
+            f"3-way comparison: **LGBM** vs **{old_arch}** vs **{new_arch}**",
+            "",
+            f"| Asset | LGBM Acc | {old_arch} Acc | {new_arch} Acc | LGBM F1 | {old_arch} F1 | {new_arch} F1 | Δ Acc (new-old) |",
+            f"|---|---|---|---|---|---|---|---|",
+        ]
+        for asset in ASSETS:
+            if asset not in layer7.get("per_asset", {}):
+                continue
+            m_new = layer7["per_asset"][asset]
+            m_old = old_layer7["per_asset"].get(asset, {})
+            lgbm_acc   = m_new["lgbm"]["accuracy"]
+            new_acc    = m_new["llm"]["accuracy"]
+            old_acc    = m_old.get("llm", {}).get("accuracy", float("nan"))
+            lgbm_f1    = m_new["lgbm"]["f1_macro"]
+            new_f1     = m_new["llm"]["f1_macro"]
+            old_f1     = m_old.get("llm", {}).get("f1_macro", float("nan"))
+            import math
+            delta      = new_acc - old_acc if not math.isnan(old_acc) else float("nan")
+            delta_str  = f"{delta:+.2%}" if not math.isnan(delta) else "—"
+            old_acc_s  = f"{old_acc:.2%}" if not math.isnan(old_acc) else "—"
+            old_f1_s   = f"{old_f1:.2%}" if not math.isnan(old_f1) else "—"
+            lines.append(
+                f"| {asset} | {lgbm_acc:.2%} | {old_acc_s} | **{new_acc:.2%}** | "
+                f"{lgbm_f1:.2%} | {old_f1_s} | **{new_f1:.2%}** | {delta_str} |"
+            )
+        # Average row
+        new_accs = [layer7["per_asset"][a]["llm"]["accuracy"] for a in ASSETS if a in layer7["per_asset"]]
+        old_accs = [old_layer7["per_asset"].get(a, {}).get("llm", {}).get("accuracy", float("nan"))
+                    for a in ASSETS if a in layer7["per_asset"]]
+        lgbm_accs_row = [layer7["per_asset"][a]["lgbm"]["accuracy"] for a in ASSETS if a in layer7["per_asset"]]
+        new_f1s = [layer7["per_asset"][a]["llm"]["f1_macro"] for a in ASSETS if a in layer7["per_asset"]]
+        old_f1s_list = [old_layer7["per_asset"].get(a, {}).get("llm", {}).get("f1_macro", float("nan"))
+                        for a in ASSETS if a in layer7["per_asset"]]
+        import math
+        avg_old_acc = float(np.nanmean(old_accs)) if old_accs else float("nan")
+        avg_new_acc = float(np.mean(new_accs)) if new_accs else float("nan")
+        avg_lgbm_acc = float(np.mean(lgbm_accs_row)) if lgbm_accs_row else float("nan")
+        avg_old_f1  = float(np.nanmean(old_f1s_list)) if old_f1s_list else float("nan")
+        avg_new_f1  = float(np.mean(new_f1s)) if new_f1s else float("nan")
+        avg_lgbm_f1 = float(np.mean([layer7["per_asset"][a]["lgbm"]["f1_macro"] for a in ASSETS if a in layer7["per_asset"]])) if new_accs else float("nan")
+        avg_delta   = avg_new_acc - avg_old_acc if not math.isnan(avg_old_acc) else float("nan")
+        delta_avg_s = f"{avg_delta:+.2%}" if not math.isnan(avg_delta) else "—"
+        old_avg_s   = f"{avg_old_acc:.2%}" if not math.isnan(avg_old_acc) else "—"
+        old_f1_avg_s = f"{avg_old_f1:.2%}" if not math.isnan(avg_old_f1) else "—"
         lines.append(
-            f"| {asset} | {m['lgbm']['accuracy']:.2%} | **{m['llm']['accuracy']:.2%}** | "
-            f"{m['lgbm']['f1_macro']:.2%} | **{m['llm']['f1_macro']:.2%}** | {agr:.2%} |"
+            f"| **Average** | **{avg_lgbm_acc:.2%}** | {old_avg_s} | **{avg_new_acc:.2%}** | "
+            f"**{avg_lgbm_f1:.2%}** | {old_f1_avg_s} | **{avg_new_f1:.2%}** | {delta_avg_s} |"
         )
+    else:
+        lines += [
+            f"| Asset | LGBM Acc | LLM Acc | LGBM F1 | LLM F1 | Agreement |",
+            f"|---|---|---|---|---|---|",
+        ]
+        for asset in ASSETS:
+            if asset not in layer7.get("per_asset", {}):
+                continue
+            m = layer7["per_asset"][asset]
+            agr = layer7["agreement_rates"].get(asset, 0)
+            lines.append(
+                f"| {asset} | {m['lgbm']['accuracy']:.2%} | **{m['llm']['accuracy']:.2%}** | "
+                f"{m['lgbm']['f1_macro']:.2%} | **{m['llm']['f1_macro']:.2%}** | {agr:.2%} |"
+            )
 
     lines += [
         "",
@@ -573,10 +694,31 @@ def main():
                              "re-run same command to resume if interrupted)")
     parser.add_argument("--checkpoint-every", type=int, default=10,
                         help="Save checkpoint every N tweets (default: 10)")
+    parser.add_argument("--old-metrics", type=str, default=None,
+                        help="Path to a previous llm_eval_metrics.json to show side-by-side comparison "
+                             "of old LLM (without thread/yfinance) vs new LLM in the report")
+    parser.add_argument("--no-thread-context", action="store_true",
+                        help="Disable tweet thread context (runs old-style LLM evaluation for comparison baseline)")
+    parser.add_argument("--no-tavily", action="store_true",
+                        help="Disable Tavily for this run (overrides LLM_USE_TAVILY=true in .env)")
     args = parser.parse_args()
 
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # Load old metrics for comparison (optional)
+    old_layer7_results = None
+    if args.old_metrics:
+        old_metrics_path = Path(args.old_metrics)
+        if old_metrics_path.exists():
+            with open(old_metrics_path) as f:
+                old_all = json.load(f)
+            old_layer7_results = old_all.get("layer7", None)
+            if old_layer7_results:
+                old_layer7_results.setdefault("architecture", "old LLM (no thread/yfinance)")
+            logger.info(f"Loaded old metrics from {old_metrics_path} for comparison")
+        else:
+            logger.warning(f"--old-metrics path not found: {old_metrics_path}")
 
     # ── Load and split data ──────────────────────────────────────────────────
     logger.info(f"Loading data from {args.data}")
@@ -694,6 +836,12 @@ def main():
 
         logger.info(f"Estimated time: {len(sample_df) * 4 / 60:.0f}–{len(sample_df) * 6 / 60:.0f} minutes")
 
+        use_thread = not args.no_thread_context
+        use_tavily = not getattr(args, "no_tavily", False)
+        arch_parts = ["thread", "yfinance"] if use_thread else ["yfinance"]
+        if use_tavily:
+            arch_parts.append("tavily")
+        arch_label = "new (" + " + ".join(arch_parts) + ")" if use_thread else "old LLM (no thread/yfinance)"
         layer7_results = evaluate_layer7(
             sample_df=sample_df,
             model_dir=args.model_dir,
@@ -701,6 +849,9 @@ def main():
             use_gpu=not args.no_gpu,
             checkpoint_path=Path(args.checkpoint_path),
             checkpoint_every=args.checkpoint_every,
+            use_thread_context=use_thread,
+            architecture_label=arch_label,
+            use_tavily=use_tavily,
         )
 
         # Print Layer 7 summary
@@ -756,6 +907,7 @@ def main():
         llm_samples=args.llm_samples,
         total_test=len(test_df),
         report_path=Path(args.output) if args.output else None,
+        old_layer7=old_layer7_results,
     )
 
     print(f"\nOutputs saved to {output_path}/")

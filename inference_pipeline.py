@@ -242,6 +242,7 @@ class InferencePipeline:
         prev_tweet_time: Optional[str] = None,
         macro_context: str = "",
         tweet_id: str = "",
+        thread_context: Optional[list] = None,
     ) -> TweetPrediction:
         """
         Full prediction for a single tweet.
@@ -287,6 +288,7 @@ class InferencePipeline:
                     lgbm_predictions=predictions,
                     is_market_relevant=is_relevant,
                     relevance_score=relevance_score,
+                    thread_context=thread_context,
                 )
             except Exception as e:
                 logger.error(f"Layer 7 LLM reasoning failed, continuing without it: {e}")
@@ -306,6 +308,7 @@ class InferencePipeline:
         timestamps: Optional[list] = None,
         tweet_ids: Optional[list] = None,
         macro_contexts: Optional[list] = None,
+        thread_contexts: Optional[list] = None,
         show_progress: bool = True,
     ) -> list:
         """
@@ -323,6 +326,8 @@ class InferencePipeline:
             tweet_ids = [str(i) for i in range(n)]
         if macro_contexts is None:
             macro_contexts = [""] * n
+        if thread_contexts is None:
+            thread_contexts = [None] * n
 
         # Extract features for all tweets
         logger.info(f"Extracting features for {n} tweets...")
@@ -387,6 +392,7 @@ class InferencePipeline:
                         lgbm_predictions=preds,
                         is_market_relevant=is_rel,
                         relevance_score=rel_score,
+                        thread_context=thread_contexts[i],
                     )
                 except Exception as e:
                     logger.error(f"Layer 7 LLM reasoning failed for tweet {tweet_ids[i]}, continuing without it: {e}")

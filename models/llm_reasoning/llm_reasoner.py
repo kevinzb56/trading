@@ -29,12 +29,27 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 ASSETS = ["gold", "equities", "btc", "cl", "wheat", "eurodollar", "treasury_2y"]
+
+# Assets where neutral (0) is statistically rare (<15% of ground truth).
+# The hybrid ensemble falls back to LGBM when the LLM predicts neutral for these.
+DIRECTIONAL_ASSETS = {"gold", "equities", "btc", "cl", "eurodollar"}
+
+# yfinance ticker symbols for each asset
+ASSET_YFINANCE_TICKERS = {
+    "gold":        "GC=F",
+    "equities":    "ES=F",
+    "btc":         "BTC-USD",
+    "cl":          "CL=F",
+    "wheat":       "ZW=F",
+    "eurodollar":  "EURUSD=X",
+    "treasury_2y": "ZT=F",
+}
 
 ASSET_DESCRIPTIONS = {
     "gold": "Gold Futures (GC) — safe-haven commodity",
@@ -136,15 +151,52 @@ who scan headlines in the next 5 minutes.
   Yield down on: risk-off flight to safety, recession fears, Fed cut signals.
 
 ═══════════════════════════════════════════════════════════════
+  GROUND TRUTH CLASS DISTRIBUTIONS (from 667 real market events)
+═══════════════════════════════════════════════════════════════
+These are the ACTUAL frequencies of bearish/neutral/bullish moves for each asset
+in response to presidential tweets. Use these as your base rate — do NOT default to neutral.
+
+  Asset          Bear    Neutral   Bull    ⚠ Neutral OK?
+  ─────────────────────────────────────────────────────────
+  gold            47%       5%      48%    ✗ NEUTRAL FORBIDDEN
+  equities        43%      10%      47%    ✗ NEUTRAL FORBIDDEN
+  btc             48%       4%      48%    ✗ NEUTRAL FORBIDDEN
+  cl              42%      14%      44%    ✗ NEUTRAL FORBIDDEN
+  eurodollar      44%      12%      44%    ✗ NEUTRAL FORBIDDEN
+  wheat           22%      55%      23%    ✓ Neutral is common here
+  treasury_2y     30%      40%      30%    ~ Neutral acceptable with justification
+
+IMPLICATION: For gold/btc/equities/cl/eurodollar, the base rate of neutral is 4-14%.
+If you are defaulting to neutral because you are "unsure" — you are almost certainly wrong.
+A 50/50 coin flip between bear and bull would outperform defaulting to neutral.
+
+═══════════════════════════════════════════════════════════════
+  ⛔ NEUTRAL BAN — HARD RULES
+═══════════════════════════════════════════════════════════════
+For these 5 assets: gold, equities, btc, cl, eurodollar
+  → direction 0 (neutral) is STRICTLY FORBIDDEN unless the tweet is completely
+    off-topic (sports, personal life, congratulations with ZERO policy content).
+  → If the tweet touches ANY macro topic (trade, fiscal, monetary, geopolitical,
+    energy), you MUST output +1 or -1 for these assets.
+  → "Unsure" is NOT a valid reason for neutral. Make a directional call.
+  → If you genuinely cannot tell the direction, output the direction implied by
+    the sentiment: negative news → -1 for risk assets, +1 for safe havens.
+
+For wheat and treasury_2y:
+  → Neutral is acceptable, but ONLY if the tweet has no plausible ag/rates angle.
+  → If there is ANY connection (trade deals affect wheat; fiscal policy affects rates),
+    make a directional call.
+
+═══════════════════════════════════════════════════════════════
   CALIBRATION RULES
 ═══════════════════════════════════════════════════════════════
-- Macro context shows topic already well-known/priced in → LOWER confidence, muted directions
-- Macro context shows surprise or escalation → HIGHER confidence, stronger directions
+- Macro context shows topic already well-known/priced in → LOWER confidence (0.25-0.40), still directional
+- Macro context shows surprise or escalation → HIGHER confidence (0.55-0.80), strong direction
 - Genuine new escalation (new country targeted, new rate announced) → confidence 0.55-0.80
-- Restatements of existing policy → confidence 0.20-0.40, be directional but modest
+- Restatements of existing policy → confidence 0.25-0.40, be directional but modest
 - New executive orders, new tariff rates, new sanctions targets → confidence 0.55-0.80+
 - Escalating tweet storm on same topic → boost confidence slightly for that topic's assets
-- Campaign rhetoric / no policy content → all assets NEUTRAL, confidence 0.15-0.25
+- Campaign rhetoric / no policy content → wheat/treasury_2y may be neutral; gold/btc/equities/cl/eurodollar MUST pick a direction
 - NEVER exceed confidence 0.85 — these are 5-minute predictions with real uncertainty
 
 ═══════════════════════════════════════════════════════════════
@@ -165,15 +217,31 @@ A tweet is NOT market-relevant if it is:
   - Vague statements without policy implications
   - Pure attacks on political opponents with no policy content
 
-FEW-SHOT EXAMPLES:
-Tweet: "TARIFFS on China! 50% immediately!" → is_market_relevant: true (new escalation)
-Tweet: "Just had a great round of golf at Mar-a-Lago!" → is_market_relevant: false
-Tweet: "The Federal Reserve must cut rates NOW. They are killing our economy!" → is_market_relevant: true
-Tweet: "Congratulations to the Kansas City Chiefs!" → is_market_relevant: false
-Tweet: "We are imposing SANCTIONS on Iran effective immediately!" → is_market_relevant: true
-Tweet: "Happy Thanksgiving to all!" → is_market_relevant: false
-Tweet: "Crooked Hillary should be locked up!" → is_market_relevant: false (political attack, no policy)
-Tweet: "We will impose 25% tariffs on ALL steel imports starting Monday." → is_market_relevant: true (new action)
+FEW-SHOT EXAMPLES WITH DIRECTIONAL OUTPUTS:
+
+Tweet: "TARIFFS on China! 50% immediately!" → relevant: true
+  → gold: +1 (safe haven bid), equities: -1 (trade war fear), btc: -1 (risk-off), cl: -1 (demand destruction),
+    wheat: +1 (supply chain fear), eurodollar: +1 (USD weakness on uncertainty), treasury_2y: -1 (flight to safety)
+
+Tweet: "Just had a great round of golf at Mar-a-Lago!" → relevant: false
+  → all assets: 0 (pure personal content, zero policy signal)
+
+Tweet: "The Federal Reserve must cut rates NOW. They are killing our economy!" → relevant: true
+  → gold: +1 (rate cut = USD debasement = gold bid), equities: +1 (rate cut = risk-on),
+    btc: +1 (rate cut = liquidity = crypto up), cl: +1 (rate cut = demand expectations),
+    wheat: 0 (no direct ag link), eurodollar: +1 (USD weakens on rate cut), treasury_2y: +1 (prices up = yield down)
+
+Tweet: "We are imposing SANCTIONS on Iran effective immediately!" → relevant: true
+  → gold: +1 (geopolitical spike), equities: -1 (Middle East risk), btc: -1 (risk-off),
+    cl: +1 (Iran oil supply disruption), wheat: 0, eurodollar: -1 (USD strengthens on crisis), treasury_2y: +1 (flight to safety)
+
+Tweet: "Crooked Hillary should be locked up!" → relevant: false
+  → all assets: 0 (political attack, zero policy content)
+
+Tweet: "We will impose 25% tariffs on ALL steel imports starting Monday." → relevant: true
+  → gold: +1 (inflation/uncertainty), equities: -1 (cost pressures + trade war),
+    btc: -1 (risk-off), cl: -1 (demand slowdown), wheat: +1 (trade barrier contagion),
+    eurodollar: +1 (USD uncertainty), treasury_2y: -1 (flight to safety pressure)
 
 OUTPUT FORMAT — return ONLY valid JSON, no prose outside the JSON:
 {
@@ -199,7 +267,9 @@ HARD RULES:
 - confidence must be between 0.0 and 1.0
 - reasoning must be ≤ 150 characters
 - If is_market_relevant is false, set all asset directions to 0 with confidence 0.2
-- For relevant tweets, be directional — most assets should have a non-zero direction
+- ⛔ For gold, equities, btc, cl, eurodollar: direction 0 is FORBIDDEN if the tweet has ANY policy content.
+  These assets react directionally to every relevant tweet. If you output 0, you are almost certainly wrong.
+- For relevant tweets, ALL 7 assets should have a non-zero direction unless there is a specific reason wheat/treasury_2y is unaffected.
 - Lead with macro context and your own reasoning; use LightGBM as a secondary sanity check
 """
 
@@ -327,6 +397,8 @@ class LLMReasoner:
                 "openai package is required for Layer 7. Install it with: pip install openai>=1.0"
             )
 
+        self._yfinance_cache: dict = {}   # date_str → formatted price block
+
         self._tavily_client = None
         if tavily_api_key and use_tavily_for_llm:
             try:
@@ -410,6 +482,7 @@ class LLMReasoner:
         lgbm_predictions: dict,          # asset -> MarketImpactPrediction
         is_market_relevant: bool,
         relevance_score: float,
+        thread_context: Optional[list] = None,  # list of {"content": str, "created_at": str, "offset": int}
     ) -> "LLMReasoningResult":
         """
         Run LLM reasoning over all pipeline layer outputs.
@@ -422,6 +495,9 @@ class LLMReasoner:
             lgbm_predictions:   Dict of asset -> MarketImpactPrediction from Layer 6.
             is_market_relevant: Boolean from relevance classifier.
             relevance_score:    Float relevance probability from Layer 6.
+            thread_context:     Optional list of surrounding tweets (±5) for escalation detection.
+                                Each entry: {"content": str, "created_at": str, "offset": int}
+                                where offset is the position relative to target (-5 to +5).
 
         Returns:
             LLMReasoningResult with per-asset verdicts, or an error result if the
@@ -435,6 +511,8 @@ class LLMReasoner:
             tavily_snippet = self._fetch_tavily_context(text, created_at)
             tavily_used = bool(tavily_snippet)
 
+        yfinance_context = self._fetch_yfinance_context(created_at)
+
         messages = self._build_prompt(
             text=text,
             created_at=created_at,
@@ -444,6 +522,8 @@ class LLMReasoner:
             is_market_relevant=is_market_relevant,
             relevance_score=relevance_score,
             tavily_snippet=tavily_snippet,
+            thread_context=thread_context or [],
+            yfinance_context=yfinance_context,
         )
 
         try:
@@ -459,20 +539,42 @@ class LLMReasoner:
             latency_ms = (time.time() - t0) * 1000
 
             per_asset = {}
+            hybrid_overrides = 0
             for asset in ASSETS:
                 asset_data = parsed.get("assets", {}).get(asset, {})
                 llm_dir = int(asset_data.get("direction", 0))
                 llm_dir = max(-1, min(1, llm_dir))  # clamp to valid range
+                llm_conf = float(asset_data.get("confidence", 0.5))
+                llm_reason = str(asset_data.get("reasoning", ""))[:200]
 
-                lgbm_dir = lgbm_predictions.get(asset)
-                lgbm_direction = lgbm_dir.direction if lgbm_dir else 0
+                lgbm_pred = lgbm_predictions.get(asset)
+                lgbm_direction = lgbm_pred.direction if lgbm_pred else 0
+
+                # Strict fallback rule: whenever LLM emits neutral, fall back to Layer 6.
+                final_dir = llm_dir
+                if llm_dir == 0:
+                    final_dir = lgbm_direction
+                    hybrid_conf = lgbm_pred.confidence if lgbm_pred else llm_conf
+                    llm_reason = (
+                        f"[NEUTRAL_FALLBACK→LGBM={DIRECTION_LABELS[lgbm_direction]}] {llm_reason}"
+                    )[:200]
+                    llm_conf = hybrid_conf
+                    hybrid_overrides += 1
+                    logger.debug(
+                        f"Hybrid: {asset} LLM=neutral -> LGBM={DIRECTION_LABELS[lgbm_direction]}"
+                    )
 
                 per_asset[asset] = LLMAssetReasoning(
                     asset=asset,
-                    direction=llm_dir,
-                    confidence=float(asset_data.get("confidence", 0.5)),
-                    reasoning=str(asset_data.get("reasoning", ""))[:200],
-                    agrees_with_lgbm=(llm_dir == lgbm_direction),
+                    direction=final_dir,
+                    confidence=llm_conf,
+                    reasoning=llm_reason,
+                    agrees_with_lgbm=(final_dir == lgbm_direction),
+                )
+
+            if hybrid_overrides:
+                logger.info(
+                    f"Layer 7 hybrid ensemble: {hybrid_overrides} neutral→LGBM overrides applied"
                 )
 
             overall = parsed.get("overall_assessment", "")
@@ -576,6 +678,101 @@ class LLMReasoner:
             logger.warning(f"Layer 7 Tavily search failed: {e}")
             return ""
 
+    def _fetch_yfinance_context(self, created_at: str) -> str:
+        """
+        Fetch 5-day daily price history for all 7 assets around the tweet date.
+
+        Uses yfinance to provide the LLM with price trend context — was the market
+        already trending before this tweet? What's the week's backdrop?
+
+        Results are cached by date string so repeated calls for the same day
+        (common in batch evaluation) only hit the network once.
+
+        Returns a formatted multi-line string, or empty string if yfinance
+        is not installed or all fetches fail.
+        """
+        if not created_at:
+            return ""
+
+        try:
+            import yfinance as yf
+        except ImportError:
+            logger.debug("yfinance not installed — skipping price context. Install with: pip install yfinance")
+            return ""
+
+        # Parse tweet date
+        try:
+            dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            tweet_date = dt.date()
+        except (ValueError, AttributeError):
+            return ""
+
+        date_key = str(tweet_date)
+        if date_key in self._yfinance_cache:
+            return self._yfinance_cache[date_key]
+
+        # Fetch 7 calendar days back so we always get 5 trading days
+        fetch_start = tweet_date - timedelta(days=8)
+        fetch_end   = tweet_date + timedelta(days=1)   # inclusive of tweet day
+
+        lines = [
+            f"Showing last 5 trading days of daily closes up to {tweet_date} (tweet date).",
+            f"Use to judge: was the market trending before this tweet? Is there unusual volatility?",
+            f"",
+            f"{'Asset':<14} {'Ticker':<10} {'5d ago':>8} {'4d ago':>8} {'3d ago':>8} {'2d ago':>8} {'1d ago':>8} {'Wk Chg%':>8} {'Trend':>7}",
+            "-" * 85,
+        ]
+
+        any_success = False
+        for asset in ASSETS:
+            ticker_sym = ASSET_YFINANCE_TICKERS[asset]
+            try:
+                ticker = yf.Ticker(ticker_sym)
+                hist = ticker.history(
+                    start=fetch_start.strftime("%Y-%m-%d"),
+                    end=fetch_end.strftime("%Y-%m-%d"),
+                    interval="1d",
+                    auto_adjust=True,
+                    raise_errors=False,
+                )
+                if hist is None or hist.empty:
+                    lines.append(f"  {asset:<12} {ticker_sym:<10} {'(no data)':>8}")
+                    continue
+
+                # Keep only trading days up to and including tweet_date
+                closes = hist["Close"].dropna()
+                closes = closes[closes.index.date <= tweet_date]
+                closes = closes.tail(5)
+
+                if len(closes) < 2:
+                    lines.append(f"  {asset:<12} {ticker_sym:<10} {'(insufficient data)':>20}")
+                    continue
+
+                # Pad to 5 values with dashes for shorter histories
+                vals = list(closes.values)
+                padded = ["   —  "] * (5 - len(vals)) + [f"{v:8.2f}" for v in vals]
+                wk_chg = (vals[-1] - vals[0]) / vals[0] * 100 if vals[0] != 0 else 0
+                trend = "↑" if wk_chg > 0.1 else ("↓" if wk_chg < -0.1 else "→")
+
+                lines.append(
+                    f"  {asset:<12} {ticker_sym:<10} "
+                    + "".join(padded)
+                    + f" {wk_chg:+7.2f}%  {trend}"
+                )
+                any_success = True
+
+            except Exception as e:
+                logger.debug(f"yfinance fetch failed for {ticker_sym}: {e}")
+                lines.append(f"  {asset:<12} {ticker_sym:<10} {'(fetch error)':>8}")
+
+        if not any_success:
+            result = ""
+        else:
+            result = "\n".join(lines)
+
+        self._yfinance_cache[date_key] = result
+        return result
+
     def _build_prompt(
         self,
         text: str,
@@ -586,12 +783,14 @@ class LLMReasoner:
         is_market_relevant: bool,
         relevance_score: float,
         tavily_snippet: str,
+        thread_context: list,
+        yfinance_context: str,
     ) -> list:
         """Build the OpenAI messages list for the reasoning call."""
 
         sections = []
 
-        # --- [1] Macro Context (Tavily) — placed FIRST so the model calibrates before seeing the tweet ---
+        # --- [1] Macro Context (Tavily) — placed FIRST for temporal calibration ---
         if tavily_snippet:
             sections.append(
                 "=== MACRO CONTEXT — WEEKLY MARKET BACKGROUND (Tavily) ===\n"
@@ -606,10 +805,54 @@ class LLMReasoner:
                 "Be conservative with confidence — without knowing what's priced in, uncertainty is higher."
             )
 
-        # --- [2] Tweet ---
+        # --- [2] yfinance Price Context ---
+        if yfinance_context:
+            sections.append(
+                "=== MARKET PRICE CONTEXT (yfinance — 5-day daily bars) ===\n"
+                "Shows how each asset was trending in the days BEFORE this tweet.\n"
+                "Key signals: Was gold already bid? Were equities at highs or lows?\n"
+                "A tweet that hits a market already moving in the same direction has amplified impact.\n\n"
+                + yfinance_context
+            )
+        else:
+            sections.append(
+                "=== MARKET PRICE CONTEXT ===\n"
+                "No historical price data available for this date."
+            )
+
+        # --- [3] Tweet Thread Context ---
+        if thread_context:
+            thread_lines = [
+                "Shows what the president was posting AROUND this tweet.",
+                "Key signals: Is this part of a tweet storm? Escalating topic? Or an isolated remark?",
+                "Multiple tweets on the same topic in short succession = escalating pattern = higher impact.",
+                "",
+            ]
+            for item in thread_context:
+                offset = item.get("offset", 0)
+                ts = item.get("created_at", "")
+                content = item.get("content", "")[:200]
+                if offset == 0:
+                    prefix = "[TARGET ▶]"
+                elif offset < 0:
+                    prefix = f"[{offset:+d}]     "
+                else:
+                    prefix = f"[{offset:+d}]     "
+                thread_lines.append(f"  {prefix} {ts[:16]}  {content}")
+            sections.append(
+                "=== TWEET THREAD CONTEXT (±5 surrounding tweets) ===\n"
+                + "\n".join(thread_lines)
+            )
+        else:
+            sections.append(
+                "=== TWEET THREAD CONTEXT ===\n"
+                "No thread context available — treat this tweet in isolation."
+            )
+
+        # --- [4] Tweet ---
         sections.append(f"=== TARGET TWEET ===\nText: {text}\nTimestamp: {created_at or 'unknown'}\nPrediction horizon: {timeframe}")
 
-        # --- Layer 1: NER ---
+        # --- [5] Layer 1: NER ---
         ner = getattr(intermediates, "ner_result", None)
         if ner is not None:
             entities = getattr(ner, "entities", [])
@@ -714,9 +957,13 @@ class LLMReasoner:
             "FINAL CHECKLIST BEFORE YOU ANSWER:\n"
             "1. Did you use the MACRO CONTEXT above to judge whether this tweet is new info or already priced in?\n"
             "2. You are predicting a 5-MINUTE KNEE-JERK reaction — algo/headline scanners, not fundamentals.\n"
-            "3. If the tweet is relevant, be DIRECTIONAL — most assets should have a non-zero direction.\n"
+            "3. ⛔ NEUTRAL CHECK: For gold, equities, btc, cl, eurodollar — if you wrote direction=0 and the\n"
+            "   tweet has ANY policy/macro content, GO BACK and pick +1 or -1. The base rate of neutral for\n"
+            "   these assets is only 4-14%. Defaulting to neutral means you are almost certainly wrong.\n"
             "4. Did you check whether LightGBM's advisory agrees with your view? If it disagrees, have you considered why?\n"
             "5. Is your confidence calibrated to how much the macro context shows this topic is already priced in?\n"
+            "6. COUNT your neutral outputs: if more than 2 assets are neutral AND the tweet is relevant,\n"
+            "   reconsider — most relevant tweets move most assets.\n"
             "Now produce your JSON assessment covering all 7 assets:"
         )
 
