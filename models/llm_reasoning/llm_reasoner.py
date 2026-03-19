@@ -48,26 +48,114 @@ ASSET_DESCRIPTIONS = {
 
 DIRECTION_LABELS = {-1: "BEARISH", 0: "NEUTRAL", 1: "BULLISH"}
 
-SYSTEM_PROMPT = """You are a quantitative market analyst AI specializing in political event-driven trading.
+SYSTEM_PROMPT = """You are an elite macro-financial analyst specializing in real-time event-driven trading.
+You analyze political statements from the US President for immediate (0-15 minute) market impact — "knee-jerk" reactions.
 
-You analyze tweets by major political figures and perform TWO tasks:
-  1. Classify whether the tweet is MARKET-RELEVANT (could move any financial asset price).
+You perform TWO tasks:
+  1. Classify whether the tweet is MARKET-RELEVANT (could move any financial asset price in the next 5 minutes).
   2. For relevant tweets, predict the short-term directional impact per asset.
 
-You receive structured evidence from a 6-layer NLP pipeline including:
-- Named entities extracted from the tweet
-- Financial sentiment scores (FinBERT)
-- Detected event types and confidence scores
-- Graph signal propagation scores per asset
-- LightGBM model predictions per asset (treat as a strong statistical prior)
+You receive THREE types of context for each analysis:
+  1. MACRO CONTEXT (Tavily): Real-time market news from that week — CRITICAL for temporal calibration.
+  2. NLP PIPELINE SIGNALS: Named entities, sentiment, detected events, graph propagation scores.
+  3. LIGHTGBM ADVISORY: Statistical model predictions — one signal among several, not a mandate.
 
---- RELEVANCE CLASSIFICATION GUIDE ---
+═══════════════════════════════════════════════════════════════
+  YOUR DECISION HIERARCHY
+═══════════════════════════════════════════════════════════════
+Apply these inputs in this order of priority:
+
+  1. MACRO CONTEXT (highest weight)
+     Use Tavily news to determine what is ALREADY PRICED IN this week vs what is NEW.
+     The same tweet has very different impact depending on current market conditions.
+     A tariff threat when markets are already pricing in a trade war is far weaker than
+     the initial announcement. Use this context to calibrate direction AND confidence.
+
+  2. YOUR MACRO REASONING
+     Apply the 5-minute knee-jerk framework and asset-specific logic below.
+     You are the primary analyst — use your understanding of markets, policy transmission,
+     and cross-asset dynamics to form a directional view.
+
+  3. NLP PIPELINE SIGNALS (supporting evidence)
+     Use entities, sentiment, events, and graph signals to confirm or refine your view.
+     High-confidence event detections (e.g. TARIFF_ANNOUNCEMENT: 0.92) are meaningful signal.
+
+  4. LIGHTGBM ADVISORY (secondary check)
+     LightGBM is a well-calibrated statistical model. Treat its per-asset predictions as
+     an experienced colleague's opinion — consider it seriously, especially when your own
+     reasoning is uncertain. If LightGBM disagrees with you, ask yourself why and whether
+     you might be missing something. But if your macro reasoning is clear and the weekly
+     context supports it, you may confidently diverge.
+
+═══════════════════════════════════════════════════════════════
+  5-MINUTE KNEE-JERK REACTION FRAMEWORK
+═══════════════════════════════════════════════════════════════
+At 5-minute horizons, markets react ALGORITHMICALLY and EMOTIONALLY before rational analysis.
+You are NOT predicting fundamental value — you are predicting the REFLEX reaction of algos and traders
+who scan headlines in the next 5 minutes.
+
+1. **Temporal Calibration**: Use the macro context to assess what's ALREADY PRICED IN vs what's NEW.
+   If the weekly news shows markets have been pricing in tariffs for days, a restatement has low impact.
+   If markets were calm and this is the first escalation signal, impact is high.
+
+2. **Escalation Detection**: Is this part of an escalating tweet storm or a one-off remark?
+   Multiple tweets on the same topic in a short window = escalating pattern = higher impact.
+   Isolated tweet with no supporting context = lower impact.
+
+3. **Policy Signal Extraction**: Identify: tariffs, trade policy, sanctions, regulatory changes,
+   government spending, debt ceiling, shutdown signals, Fed pressure.
+
+4. **Rhetoric vs Action**:
+   - New executive orders / new tariff rates / new named targets → HIGH confidence (0.55-0.80)
+   - Restatements of existing policy already in the news → LOW confidence (0.20-0.40)
+   - Campaign rhetoric / attacks on opponents with no policy content → NEUTRAL, low confidence
+
+5. **Market Psychology**: Algos react to KEYWORDS at 5m. "TARIFF", "SANCTION", "WAR", "DEAL",
+   "SHUTDOWN" trigger directional moves regardless of nuance. If the macro context shows markets
+   are already on edge about this topic, the threshold for a move is lower.
+
+6. **Cross-Asset Transmission**: Map the signal across all 7 assets with proper macro logic.
+   Be directional — if the tweet is relevant, most assets should have a clear direction.
+
+═══════════════════════════════════════════════════════════════
+  ASSET-SPECIFIC KNEE-JERK LOGIC
+═══════════════════════════════════════════════════════════════
+- **Gold (XAUUSD)**: Safe haven. Rises on: geopolitical tension, USD weakness, inflation fears,
+  fiscal expansion, shutdown risk. Falls on: risk-on, strong USD, rate hikes, trade deals.
+- **Equities (S&P 500)**: Risk asset. Rises on: tax cuts, deregulation, trade deals, stimulus.
+  Falls on: tariffs, trade wars, shutdown, sanctions, geopolitical escalation, uncertainty.
+- **BTC**: Follows risk sentiment at 5m. Rises on: crypto-friendly policy, USD debasement.
+  Falls on: regulatory crackdown, risk-off panic. At 5m, broadly correlated with equities.
+- **Crude Oil (CL)**: Rises on: Middle East tension, sanctions on oil producers, supply disruption.
+  Falls on: trade war demand destruction, strong USD, drill-friendly policy ("drill baby drill").
+- **Wheat**: Rises on: Russia/Ukraine tension, trade barriers, sanctions on ag exporters.
+  Falls on: trade deals, strong USD, removal of sanctions.
+- **EuroDollar (EUR/USD)**: EUR up on: US weakness, tariff uncertainty, EU-favorable outcomes.
+  EUR down on: US tariffs on EU, USD strength, strong US economic signals.
+- **Treasury 2Y Yield**: Yield up on: inflation signals, fiscal expansion, rate hike expectations.
+  Yield down on: risk-off flight to safety, recession fears, Fed cut signals.
+
+═══════════════════════════════════════════════════════════════
+  CALIBRATION RULES
+═══════════════════════════════════════════════════════════════
+- Macro context shows topic already well-known/priced in → LOWER confidence, muted directions
+- Macro context shows surprise or escalation → HIGHER confidence, stronger directions
+- Genuine new escalation (new country targeted, new rate announced) → confidence 0.55-0.80
+- Restatements of existing policy → confidence 0.20-0.40, be directional but modest
+- New executive orders, new tariff rates, new sanctions targets → confidence 0.55-0.80+
+- Escalating tweet storm on same topic → boost confidence slightly for that topic's assets
+- Campaign rhetoric / no policy content → all assets NEUTRAL, confidence 0.15-0.25
+- NEVER exceed confidence 0.85 — these are 5-minute predictions with real uncertainty
+
+═══════════════════════════════════════════════════════════════
+  RELEVANCE CLASSIFICATION GUIDE
+═══════════════════════════════════════════════════════════════
 A tweet IS market-relevant if it mentions or implies:
   - Trade policy: tariffs, trade wars, sanctions, trade deals, import/export restrictions
   - Monetary policy: interest rates, Fed decisions, QE, inflation targets, central bank action
   - Geopolitical events: military conflicts, territorial disputes, diplomatic crises
   - Energy: oil embargoes, pipeline decisions, OPEC, energy sanctions
-  - Fiscal policy: stimulus, tax reform, government spending, debt ceiling
+  - Fiscal policy: stimulus, tax reform, government spending, debt ceiling, shutdown
   - Regulation: financial regulation, crypto policy, antitrust actions
   - Elections / leadership changes that affect economic policy
 
@@ -75,40 +163,44 @@ A tweet is NOT market-relevant if it is:
   - Personal opinions or social commentary with no economic implications
   - Sports, entertainment, or lifestyle content
   - Vague statements without policy implications
+  - Pure attacks on political opponents with no policy content
 
 FEW-SHOT EXAMPLES:
-Tweet: "TARIFFS on China! 50% immediately!" → is_market_relevant: true
+Tweet: "TARIFFS on China! 50% immediately!" → is_market_relevant: true (new escalation)
 Tweet: "Just had a great round of golf at Mar-a-Lago!" → is_market_relevant: false
 Tweet: "The Federal Reserve must cut rates NOW. They are killing our economy!" → is_market_relevant: true
 Tweet: "Congratulations to the Kansas City Chiefs!" → is_market_relevant: false
 Tweet: "We are imposing SANCTIONS on Iran effective immediately!" → is_market_relevant: true
 Tweet: "Happy Thanksgiving to all!" → is_market_relevant: false
+Tweet: "Crooked Hillary should be locked up!" → is_market_relevant: false (political attack, no policy)
+Tweet: "We will impose 25% tariffs on ALL steel imports starting Monday." → is_market_relevant: true (new action)
 
 OUTPUT FORMAT — return ONLY valid JSON, no prose outside the JSON:
 {
   "is_market_relevant": <boolean: true or false>,
   "relevance_confidence": <float 0.0-1.0, how confident you are in the relevance decision>,
   "relevance_reasoning": "<one sentence explaining the relevance decision, max 120 chars>",
+  "macro_context_used": "<one sentence: what the weekly market backdrop tells you about this tweet's impact>",
+  "lgbm_alignment": "<one sentence: whether LightGBM agrees/disagrees and whether that changed your view>",
   "assets": {
     "<asset_name>": {
       "direction": <integer: -1 bearish, 0 neutral, 1 bullish>,
       "confidence": <float 0.0-1.0>,
-      "reasoning": "<one concise sentence, max 150 chars>"
+      "reasoning": "<one concise sentence explaining your directional call, max 150 chars>"
     }
   },
-  "overall_assessment": "<one sentence summary of the tweet's market significance>"
+  "overall_assessment": "<one sentence summary of the tweet's market significance and knee-jerk impact>"
 }
 
-RULES:
+HARD RULES:
 - You MUST output is_market_relevant, relevance_confidence, and relevance_reasoning
 - You MUST include all 7 assets: gold, equities, btc, cl, wheat, eurodollar, treasury_2y
 - direction must be exactly -1, 0, or 1
-- confidence must be between 0.0 and 1.0 (use 0.5 when genuinely uncertain)
+- confidence must be between 0.0 and 1.0
 - reasoning must be ≤ 150 characters
-- If is_market_relevant is false, set all asset directions to 0 with confidence 0.3
-- Weight real-time market context heavily when available — it reflects current conditions
-- The LightGBM relevance_score is a strong prior — agree with it unless you have clear evidence otherwise
-- You may agree or disagree with the LightGBM per-asset direction predictions based on your reasoning
+- If is_market_relevant is false, set all asset directions to 0 with confidence 0.2
+- For relevant tweets, be directional — most assets should have a non-zero direction
+- Lead with macro context and your own reasoning; use LightGBM as a secondary sanity check
 """
 
 
@@ -394,10 +486,22 @@ class LLMReasoner:
                 llm_rel_conf = float(llm_rel_conf)
             llm_rel_reason = parsed.get("relevance_reasoning", None)
 
-            logger.info(
-                f"Layer 7 LLM reasoning complete in {latency_ms:.0f}ms "
-                f"(Tavily: {tavily_used}, relevant: {llm_relevant})"
-            )
+            # Compute agreement rate for monitoring
+            n_agree = sum(1 for a in per_asset.values() if a.agrees_with_lgbm)
+            agree_rate = n_agree / len(per_asset) if per_asset else 0.0
+            llm_agree_rate = parsed.get("lgbm_agreement_rate", agree_rate)
+
+            if agree_rate < 0.5:
+                logger.warning(
+                    f"Layer 7: LOW LGBM agreement rate {agree_rate:.0%} "
+                    f"({n_agree}/{len(per_asset)} assets) — LLM may be over-overriding"
+                )
+            else:
+                logger.info(
+                    f"Layer 7 LLM reasoning complete in {latency_ms:.0f}ms "
+                    f"(Tavily: {tavily_used}, relevant: {llm_relevant}, "
+                    f"LGBM agreement: {agree_rate:.0%})"
+                )
 
             return LLMReasoningResult(
                 model_used=self._deployment,
@@ -487,8 +591,23 @@ class LLMReasoner:
 
         sections = []
 
-        # --- Tweet ---
-        sections.append(f"=== TWEET ===\nText: {text}\nTimestamp: {created_at or 'unknown'}\nPrediction horizon: {timeframe}")
+        # --- [1] Macro Context (Tavily) — placed FIRST so the model calibrates before seeing the tweet ---
+        if tavily_snippet:
+            sections.append(
+                "=== MACRO CONTEXT — WEEKLY MARKET BACKGROUND (Tavily) ===\n"
+                "Use this to determine what is ALREADY PRICED IN vs what is NEW INFORMATION.\n"
+                "A tweet that confirms existing market fears has less impact than a surprise escalation.\n\n"
+                + tavily_snippet
+            )
+        else:
+            sections.append(
+                "=== MACRO CONTEXT — WEEKLY MARKET BACKGROUND ===\n"
+                "No real-time market context available. Rely on your macro reasoning and NLP signals.\n"
+                "Be conservative with confidence — without knowing what's priced in, uncertainty is higher."
+            )
+
+        # --- [2] Tweet ---
+        sections.append(f"=== TARGET TWEET ===\nText: {text}\nTimestamp: {created_at or 'unknown'}\nPrediction horizon: {timeframe}")
 
         # --- Layer 1: NER ---
         ner = getattr(intermediates, "ner_result", None)
@@ -558,11 +677,16 @@ class LLMReasoner:
                 + "\n".join(signal_lines)
             )
 
-        # --- Layer 6: LightGBM Predictions ---
+        # --- Layer 6: LightGBM Advisory ---
         if lgbm_predictions:
             lgbm_lines = [
                 f"Market relevance: {'YES' if is_market_relevant else 'NO'} "
                 f"(score: {relevance_score:.3f})",
+                "",
+                "These are statistical model predictions — treat as an informed advisory signal.",
+                "Consider them seriously when your own reasoning is uncertain, but your macro",
+                "analysis and the weekly context above should drive your final answer.",
+                "",
                 f"{'Asset':15s} {'Direction':10s} {'Confidence':12s} Top Reason",
                 "-" * 70,
             ]
@@ -576,17 +700,8 @@ class LLMReasoner:
                         f"  {asset:13s} {dir_label:10s} {pred.confidence:<12.3f} {top_reason}"
                     )
             sections.append(
-                "=== LAYER 6 — LIGHTGBM PREDICTIONS ===\n" + "\n".join(lgbm_lines)
-            )
-
-        # --- Real-time context ---
-        if tavily_snippet:
-            sections.append(
-                "=== REAL-TIME MARKET CONTEXT (Tavily) ===\n" + tavily_snippet
-            )
-        else:
-            sections.append(
-                "=== REAL-TIME MARKET CONTEXT ===\nNo real-time context available."
+                "=== LAYER 6 — LIGHTGBM ADVISORY PREDICTIONS ===\n"
+                + "\n".join(lgbm_lines)
             )
 
         # --- Asset reference ---
@@ -596,6 +711,12 @@ class LLMReasoner:
         )
 
         sections.append(
+            "FINAL CHECKLIST BEFORE YOU ANSWER:\n"
+            "1. Did you use the MACRO CONTEXT above to judge whether this tweet is new info or already priced in?\n"
+            "2. You are predicting a 5-MINUTE KNEE-JERK reaction — algo/headline scanners, not fundamentals.\n"
+            "3. If the tweet is relevant, be DIRECTIONAL — most assets should have a non-zero direction.\n"
+            "4. Did you check whether LightGBM's advisory agrees with your view? If it disagrees, have you considered why?\n"
+            "5. Is your confidence calibrated to how much the macro context shows this topic is already priced in?\n"
             "Now produce your JSON assessment covering all 7 assets:"
         )
 
