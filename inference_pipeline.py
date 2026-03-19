@@ -337,14 +337,25 @@ class InferencePipeline:
             except ImportError:
                 pass
 
+        all_intermediates = []
         for i in iterator:
             prev_ts = timestamps[i - 1] if i > 0 else None
-            features = self.extract_features(
-                text=texts[i],
-                created_at=timestamps[i],
-                prev_tweet_time=prev_ts,
-                macro_context=macro_contexts[i],
-            )
+            if self.use_llm_reasoning:
+                features, intermediates = self._extract_features_with_intermediates(
+                    text=texts[i],
+                    created_at=timestamps[i],
+                    prev_tweet_time=prev_ts,
+                    macro_context=macro_contexts[i],
+                )
+                all_intermediates.append(intermediates)
+            else:
+                features = self.extract_features(
+                    text=texts[i],
+                    created_at=timestamps[i],
+                    prev_tweet_time=prev_ts,
+                    macro_context=macro_contexts[i],
+                )
+                all_intermediates.append(None)
             all_features.append(features)
 
         feature_time = time.time() - t0
@@ -359,15 +370,33 @@ class InferencePipeline:
         predict_time = time.time() - t0
         logger.info(f"Prediction: {predict_time:.1f}s ({predict_time/n*1000:.0f}ms/tweet)")
 
-        # Assemble results
+        # Assemble results, running Layer 7 LLM reasoning per tweet if enabled
+        if self.use_llm_reasoning and self.llm_reasoner is not None:
+            logger.info(f"Running Layer 7 LLM reasoning for {n} tweets...")
+
         results = []
         for i, (preds, is_rel, rel_score) in enumerate(batch_results):
+            llm_result = None
+            if self.use_llm_reasoning and self.llm_reasoner is not None and all_intermediates[i] is not None:
+                try:
+                    llm_result = self.llm_reasoner.reason(
+                        text=texts[i],
+                        created_at=timestamps[i],
+                        timeframe=self.target_timeframe,
+                        intermediates=all_intermediates[i],
+                        lgbm_predictions=preds,
+                        is_market_relevant=is_rel,
+                        relevance_score=rel_score,
+                    )
+                except Exception as e:
+                    logger.error(f"Layer 7 LLM reasoning failed for tweet {tweet_ids[i]}, continuing without it: {e}")
             results.append(TweetPrediction(
                 tweet_id=tweet_ids[i],
                 content=texts[i],
                 is_market_relevant=is_rel,
                 relevance_score=rel_score,
                 predictions=preds,
+                llm_reasoning=llm_result,
             ))
 
         return results
@@ -468,6 +497,17 @@ def results_to_dataframe(results: list) -> pd.DataFrame:
             row[f"{asset}_dir"] = pred.direction
             row[f"{asset}_conf"] = pred.confidence
             row[f"{asset}_reasoning"] = "; ".join(pred.reasoning[:3])
+        if r.llm_reasoning is not None:
+            row["llm_overall_assessment"] = r.llm_reasoning.overall_assessment
+            row["llm_is_market_relevant"] = r.llm_reasoning.llm_is_market_relevant
+            row["llm_relevance_reasoning"] = r.llm_reasoning.llm_relevance_reasoning
+            row["llm_model_used"] = r.llm_reasoning.model_used
+            row["llm_latency_ms"] = r.llm_reasoning.latency_ms
+            row["llm_tavily_used"] = r.llm_reasoning.tavily_context_used
+            for asset, ar in r.llm_reasoning.per_asset.items():
+                row[f"{asset}_llm_dir"] = ar.direction
+                row[f"{asset}_llm_conf"] = ar.confidence
+                row[f"{asset}_llm_reasoning"] = ar.reasoning
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -517,6 +557,8 @@ if __name__ == "__main__":
             target_timeframe=args.timeframe,
             tavily_api_key=tavily_api_key,
             use_tavily_context=args.use_tavily_context,
+            use_llm_reasoning=args.use_llm_reasoning,
+            llm_use_tavily=args.llm_use_tavily,
         )
         results = pipeline.predict_batch(
             texts=df["content"].tolist(),
